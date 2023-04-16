@@ -76,6 +76,12 @@ A Deployment is a blueprint of Pods. By defining the number of replicas, K8s cre
 ### StatefulSet
 A StatefulSet is a blueprint for stateful applications, like databases etc. In addition to replicating features, StatefulSet makes sure database reads and writes are synchronized to avoid data inconsistencies.
 
+### Layers of Abstraction
+Deployment manages a\
+-> ReplicaSet, which manages\
+--> Pods, which are an abstraction of\
+---> Containers
+
 </details>
 
 *****
@@ -85,21 +91,21 @@ A StatefulSet is a blueprint for stateful applications, like databases etc. In a
 <br />
 
 A Kubernetes cluster consists of a set of machines, called "Nodes". There are two types of Nodes:
-- Worker Nodes run the containerized applications. Each Node runs multiple Pods.
-- Control Planes manage the Worker Nodes and their Pods in the cluster. Replicated over multiple machines.
+- **Worker Nodes** run the containerized applications. Each Node runs multiple Pods.
+- **Control Planes** manage the Worker Nodes and their Pods in the cluster. Replicated over multiple machines.
 
 ### Worker Node
 On each worker node 3 processes need to be installed:
-- Container Runtime: responsible for running containers (e.g. containerd, CRI-O, Docker)
-- Kubelet: Agent that makes sure containers are running in a Pod. Talks to underlying server (to get resources for Pod) and container runtime (to start containers in Pod)
-- Kube-Proxy: A network proxy with intelligent forwarding of requests to the Pods (e.g. forwarding to a Pod running on the same Node to avoid network traffic)
+- **Container Runtime:** responsible for running containers (e.g. containerd, CRI-O, Docker)
+- **Kubelet:** Agent that makes sure containers are running in a Pod. Talks to underlying server (to get resources for Pod) and container runtime (to start containers in Pod)
+- **Kube-Proxy:** A network proxy with intelligent forwarding of requests to the Pods (e.g. forwarding to a Pod running on the same Node to avoid network traffic)
 
 ### Control Plane
 Control Planes makes global decisions about the cluster. They detect and respond to cluster events. On each control plane 4 processes need to be installed:
-- API server: The cluster gateway - single entrypoint to the cluster. Acts as a gatekeeper for authentication, validating the request. Clients to interact with the API server are UI, API or CLI (kubectl).
-- Scheduler: Decides on which Node a new Pod should be scheduled. Factors taken into account for scheduling decisions are resource requirements, hardware/software/ policy constraints, data locality, ... After having chosen the node, the Kubelet on that node does the actual work of running the Pod.
-- Controller Manager: Detects state changes, like crashing of Pods, and tries to recover the cluster state as soon as possible. For that it makes request to the Scheduler to re-schedule those Pods.
-- etcd: K8s' backing store for all cluster data. A consistent, high-available key-value store. Every change in the cluster gets saved or updated into it. All other processes like Scheduler, Controller Manager etc. do their work based on the data in etcd as well as communicate with each other through etcd store.
+- **API server:** The cluster gateway - single entrypoint to the cluster. Acts as a gatekeeper for authentication, validating the request. Clients to interact with the API server are UI, API or CLI (kubectl).
+- **Scheduler:** Decides on which Node a new Pod should be scheduled. Factors taken into account for scheduling decisions are resource requirements, hardware/software/ policy constraints, data locality, ... After having chosen the node, the Kubelet on that node does the actual work of running the Pod.
+- **Controller Manager:** Detects state changes, like crashing of Pods, and tries to recover the cluster state as soon as possible. For that it makes request to the Scheduler to re-schedule those Pods.
+- **etcd:** K8s' backing store for all cluster data. A consistent, high-available key-value store. Every change in the cluster gets saved or updated into it. All other processes like Scheduler, Controller Manager etc. do their work based on the data in etcd as well as communicate with each other through etcd store.
 
 ### Increase Cluster Capacity
 To add more control plane nodes or worker nodes to the cluster, just get a fresh machine, install the required K8s processes on it and join it to the K8s cluster using a K8s command.
@@ -116,18 +122,126 @@ To add more control plane nodes or worker nodes to the cluster, just get a fresh
 Minikube implements a local K8s cluster. This is useful for local K8s application development. Control Plane and Worker processes run on one machine. You can run Minikube either as a container or virtual machine on your laptop.
 
 #### Install Minikube (on Mac)
-[Installation Guide for Minikube](https://minikube.sigs.k8s.io/docs/start/)
-[Installation Guide for Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
+- [Installation Guide for Minikube](https://minikube.sigs.k8s.io/docs/start/)
+- [Installation Guide for Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
 
 ```sh
+brew update
 brew install minikube
 minikube start --driver docker
 minikube status
 
 # kubectl has been installed as a dependency of minikube
 # we don't have to install it separately
-kubectl get node
+kubectl get nodes
 ```
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 5 - Main kubectl commands</summary>
+<br />
+
+Kubectl is a CLI tool to interact with your K8s cluster. In order for kubectl to access a K8s cluster, it needs a kubeconfig file, which is created automatically when deploying your minikube cluster. By default, the config file is located at `~/.kube/config`.
+
+### Basic kubctl Commands
+
+See [reference](https://kubernetes.io/docs/reference/kubectl/)
+
+```sh
+# list components
+kubectl get all
+kubectl get node(s)
+kubectl get pod(s)
+kubectl get service(s)
+kubectl get deployment(s)
+kubectl get replicaset(s)
+
+# create components
+kubectl create {k8s component} {name} {options}
+kubectl create deployment nginx-depl --image=nginx
+
+# edit / delete components
+kubectl edit {k8s component} {name}
+kubectl delete {k8s component} {name}
+
+# debug pods
+kubectl logs {pod-name}
+kubectl describe {pod-name}
+
+# enter the container
+kubectl exec -it {pod-name} -- bash
+
+# apply a configuration file
+kubectl apply -f config-file.yaml
+
+# create a configuration file
+kubectl create deployment --image=nginx helloworld -o yaml --dry-run=client > helloworld-deployment.yaml
+
+# export a configuration file
+kubectl get deployment helloworld -o yaml > helloworld-deployment-orig.yaml 
+
+# --- get help ---
+
+kubectl options
+kubectl help
+kubectl create --help
+kubectl create deployment --help
+```
+
+### Kubernetes Configuration File
+
+Kubernetes configuration/manifest files are declarative, i.e. they specify the desired state of a K8s component. Each configuration file has 3 parts:
+- metadata
+- specification: the attributes of "spec" are specific to the component kind
+- status: automatically generated and added by K8s; K8s gets this information from etcd, which holds the current status of any K8s component; if the current status differs from the specified desired status, K8s tries to reach the desired status
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-deployment
+  labels:
+    app: devops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devops
+  template:
+    metadata:
+      labels:
+        app: devops
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.16
+        ports:
+        - containerPort: 80
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2023-04-16T16:33:13Z"
+    lastUpdateTime: "2023-04-16T16:33:13Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2023-04-16T16:33:02Z"
+    lastUpdateTime: "2023-04-16T16:33:13Z"
+    message: ReplicaSet "tododevops-deployment-74b5b8bb9f" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
+```
+
+The configuration of a Deployment is a bit special since it's an abstraction over Pod. Inside the Deployment spec we have the Pod configuration (own "metadata" and "spec" section = blueprint for Pod).
 
 </details>
 
