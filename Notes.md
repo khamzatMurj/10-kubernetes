@@ -146,7 +146,7 @@ kubectl get nodes
 
 Kubectl is a CLI tool to interact with your K8s cluster. In order for kubectl to access a K8s cluster, it needs a kubeconfig file, which is created automatically when deploying your minikube cluster. By default, the config file is located at `~/.kube/config`.
 
-### Basic kubctl Commands
+### Basic kubectl Commands
 
 See [reference](https://kubernetes.io/docs/reference/kubectl/)
 
@@ -166,6 +166,7 @@ kubectl create deployment nginx-depl --image=nginx
 # edit / delete components
 kubectl edit {k8s component} {name}
 kubectl delete {k8s component} {name}
+kubectl delete -f config-file.yaml
 
 # debug pods
 kubectl logs {pod-name}
@@ -191,12 +192,18 @@ kubectl create --help
 kubectl create deployment --help
 ```
 
-### Kubernetes Configuration File
+</details>
+
+*****
+
+<details>
+<summary>Video: 6 - YAML Configuration File</summary>
+<br />
 
 Kubernetes configuration/manifest files are declarative, i.e. they specify the desired state of a K8s component. Each configuration file has 3 parts:
-- metadata
-- specification: the attributes of "spec" are specific to the component kind
-- status: automatically generated and added by K8s; K8s gets this information from etcd, which holds the current status of any K8s component; if the current status differs from the specified desired status, K8s tries to reach the desired status
+- **metadata**
+- **specification:** the attributes of "spec" are specific to the component kind
+- **status:** automatically generated and added by K8s; K8s gets this information from etcd, which holds the current/actual state of any K8s component; if the actual state differs from the specified/desired state, K8s tries to fix that and reach the desired state
 
 ```yaml
 apiVersion: apps/v1
@@ -210,7 +217,7 @@ spec:
   selector:
     matchLabels:
       app: devops
-  template:
+  template: # Pod configuration
     metadata:
       labels:
         app: devops
@@ -219,7 +226,7 @@ spec:
       - name: nginx
         image: nginx:1.16
         ports:
-        - containerPort: 80
+        - containerPort: 8080
 status:
   availableReplicas: 1
   conditions:
@@ -242,6 +249,33 @@ status:
 ```
 
 The configuration of a Deployment is a bit special since it's an abstraction over Pod. Inside the Deployment spec we have the Pod configuration (own "metadata" and "spec" section = blueprint for Pod).
+
+### Connecting components (Labels, Selectors & Ports)
+Labels are key/value pairs that are attached to resources. The key and value can be randomly chosen. Via a selector the user can identify a set of resources (since labels do not provide uniqueness).
+
+Connecting Deployment to Pods: The label of the Pod (in the template's metadata) is matched by the selector (matchedLabels) in the deployment spec.
+
+Connecting Services to Deployments / Pods: The label of the Deployment and Pod is matched by the selector in the Service spec (the service must know which Pod belongs to it):
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: devops-service
+spec:
+  selector:
+    app: devops
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+```
+
+The `port` of a service specifies the port the service is listening on, whereas the `targetPort` defines the port the service is forwarding requests to. The `targetPort` of the service must match the `containerPort` of the Pod.
+
+To see if a service is connected with the right pods, execute `kubectl describe service <service-name>` to see the endpoints of the service. The IP address of a Pod can be displayed with `kubectl get pod <pod-name> -o wide`.
+
+To get the whole configuration file of a running deployment (and check the status information added by K8s), execute `kubectl get deployment <deployment-name> -o yaml > deployment-config-result.yaml` or `kubectl get deployment <deployment-name> -o yaml | less`.
 
 </details>
 
