@@ -280,3 +280,232 @@ To get the whole configuration file of a running deployment (and check the statu
 </details>
 
 *****
+
+<details>
+<summary>Video: 7 - Complete Demo Project (Deploying Application in K8s Cluster)</summary>
+<br />
+
+Overview:
+- User updates entries in database via browser
+- External service for Mongo Express as UI
+- Internal service for MongoDB as database
+- ConfigMap and Secret holds the MongoDB's endpoint (Service name of MongoDB) and credentials (user, pwd), which gets injected to MongoExpress Pod, so MongoExpress can connect to the DB
+
+K8s Components needed in this setup:
+- 2 Deployments / Pods
+- 2 Services (1 internal, 1 external)
+- 1 ConfigMap (holding internal service name needed by Mongo Express to connect to Mongo DB)
+- 1 Secret (holding DB credentials needed by Mongo DB and Mongo Express)
+
+Precondition: Minikube cluster is running on local machine (inside a Docker container).
+
+### MongoDB Deployment
+Create a file called `mongodb.yaml` with the following content:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-deployment
+  labels:
+    app: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo
+        ports:
+        - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-root-username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-root-password
+```
+
+We don't add the username and password as plaintext values to this file. Instead we create a secret holding these values and reference it.
+
+### Secret
+Create a file called `mongodb-secret.yaml` with the following content:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+type: Opaque
+data:
+  mongo-root-username: bW9uZ28=
+  mongo-root-password: c2VjcmV0
+```
+
+The username and password strings are base64 encoded plain-text values. To get them enter the following commands in a shell:
+```sh
+echo -n 'mongo' | base64 # -n: suppresses the trailing newline character
+# => bW9uZ28=
+echo -n 'secret' | base64
+# => c2VjcmV0
+```
+
+Because we reference the secret from within the deployment, the secret must exist when we create the deployment. So we create the secret first and then the deployment:
+```sh
+kubectl apply -f mongodb-secret.yaml
+kubectl apply -f mongodb.yaml
+
+# wait until the pod is ready
+kubectl get pods --watch
+#NAME                                  READY   STATUS              RESTARTS   AGE
+#mongodb-deployment-5d966bd9d6-2ng9f   0/1     ContainerCreating   0          5s
+#mongodb-deployment-5d966bd9d6-2ng9f   1/1     Running             0          55s
+```
+
+### Internal Service for MongoDB Pod
+Append the following content to the `mongodb.yaml` file:
+```yaml
+--- # delimiter for multiple documents within one configuration yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongodb-service
+spec:
+  selector:
+    app: mongodb # must match the label of the pod
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017 # must match the containerPort of the pod
+```
+
+Now re-apply the changes: `kubectl apply -f mongodb.yaml`.
+
+### MongoExpress Deployment
+Create a file called `mongoexpress.yaml` with the following content:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-express-deployment
+  labels:
+    app: mongo-express
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-express
+  template:
+    metadata:
+      labels:
+        app: mongo-express
+    spec:
+      containers:
+      - name: mongo-express
+        image: mongo-express
+        ports:
+        - containerPort: 8081
+        env:
+        - name: ME_CONFIG_MONGODB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mongodb-configmap
+              key: database_url
+        - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-root-username
+        - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongo-root-password
+```
+
+### ConfigMap
+Create a file called `mongodb-configmap.yaml` with the following content:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-configmap
+data:
+  database_url: mongodb-service # must match the name of the internal service
+```
+
+Just like with the secret before, the config-map must exist when we create the deployment. So we create the config-map first and then the deployment:
+```sh
+kubectl apply -f mongodb-configmap.yaml
+kubectl apply -f mongoexpress.yaml
+
+# wait until the deployment is ready
+kubectl get deployments --watch
+#NAME                       READY   UP-TO-DATE   AVAILABLE   AGE
+#mongo-express-deployment   0/1     1            0           1s
+#mongodb-deployment         1/1     1            1           82m
+#mongo-express-deployment   1/1     1            1           43s
+```
+
+### External Service for MongoExpress Pod
+Append the following content to the `mongoexpress.yaml` file:
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongo-express-service
+spec:
+  selector:
+    app: mongo-express
+  type: LoadBalancer # badly chosen name, because internal services also do load-balancing
+                     # just assigns the service an external IP address
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+      nodePort: 30000 # must be between 30'000 and 32'767
+```
+
+Now re-apply the changes and list all services:
+```sh
+kubectl apply -f mongoexpress.yaml
+kubectl get services
+# =>
+#NAME                    TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+#kubernetes              ClusterIP      10.96.0.1      <none>        443/TCP          42h
+#mongo-express-service   LoadBalancer   10.97.135.6    <pending>     8081:30000/TCP   15s
+#mongodb-service         ClusterIP      10.108.21.76   <none>        27017/TCP        17m
+```
+
+In "normal" K8s clusters the LoadBalancer service would get an external IP address. Because we are in a minikube cluster, the external IP address just shows `<pending>`. To assign an IP address accessible by our local browser we execute `minikube service mongo-express-service` which assigns an IP address and opens the browser pointing to this IP address and the external port of the specified service (or in the case of minikube running in a docker container, it opens a tunnel into the docker container):
+
+```sh
+minikube service mongo-express-service
+#|-----------|-----------------------|-------------|---------------------------|
+#| NAMESPACE |         NAME          | TARGET PORT |            URL            |
+#|-----------|-----------------------|-------------|---------------------------|
+#| default   | mongo-express-service |        8081 | http://192.168.49.2:30000 |
+#|-----------|-----------------------|-------------|---------------------------|
+#🏃  Start Tunnel für den Service mongo-express-service
+#|-----------|-----------------------|-------------|------------------------|
+#| NAMESPACE |         NAME          | TARGET PORT |          URL           |
+#|-----------|-----------------------|-------------|------------------------|
+#| default   | mongo-express-service |             | http://127.0.0.1:59516 |
+#|-----------|-----------------------|-------------|------------------------|
+#🎉  Öffne Service default/mongo-express-service im Default-Browser...
+#❗  Weil Sie einen Docker Treiber auf darwin verwenden, muss das Terminal während des Ausführens #offen bleiben.
+```
+
+</details>
+
+*****
