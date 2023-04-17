@@ -9,4 +9,4 @@ The Java application the [exercises](./Exercises.md) of this module are based on
 
 ### Demo Projects
 And finally it contains the following demo projects:
-- [todo](./demo-projects/1-todo/)
+- [Deploy Applications to Local K8s Cluster](./demo-projects/1-deploy-to-local-k8s-cluster/)
