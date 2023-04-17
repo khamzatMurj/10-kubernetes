@@ -509,3 +509,86 @@ minikube service mongo-express-service
 </details>
 
 *****
+
+<details>
+<summary>Video: 8 - Namespaces (Organizing Components)</summary>
+<br />
+
+Namespaces organise resources in a K8s cluster. There are 4 namespaces available in a new cluster:
+```sh
+kubectl get namespaces
+# =>
+# NAME              STATUS   AGE
+# default           Active   46h
+# kube-node-lease   Active   46h
+# kube-public       Active   46h
+# kube-system       Active   46h
+```
+
+- kube-system: don't modify anything in this namespace; system processes and control-plane processes are running in this namespace
+- kube-public: contains publicly accessible data (`kubectl cluster-info`)
+- kube-node-lease: holds information about the heartbeats of nodes; each node has its associated lease object whithin this namespace (holding availabilty information)
+- default: start deploying your application in the default namespace
+
+To create a new namespace, use the command
+```sh
+kubectl create namespace <ns-name>
+```
+
+Or apply a config file of the following form:
+```sh
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: <ns-name>
+```
+
+Within a configuration file the target namespace for the component can be specified in the metadata section:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-configmap
+  namespace: my-namespace
+data:
+  database_url: mongodb-service
+```
+
+When applying a configuration file using `kubectl` the target namespace can be specified using the option --namespace or short -n:
+```sh
+kubectl apply -f config.yaml --namespace=my-namespace
+```
+
+In `kubectl` commands listing components you can add the option --namespace or short -n to specify the namespace from which you want to display the components:
+```sh
+kubectl get deployments -n=dev
+```
+
+### Use Cases for When to Use Namespaces
+- Group resources logically (e.g. database, monitoring, etc.)
+- Isolate team resources to avoid conflicts
+- Define environments and share resources between them (e.g. dev, stage, prod, using resources in one elastic-stack namespace; or prod-blue, prod-green using resources in one elastic-stack namespace)
+- Limit permissions and compute resources (CPU, RAM, Storage) per namespace
+
+Restrictions: In namespace B you cannot reference a ConfigMap or a Secret defined in namesapce A.
+
+But you can share a Service defined in namespace A and use it in namespace B too. For example if the service 'mongodb-service is defined in the namespace 'database' and you want to reference it from a ConfigMap specification in namespace 'my-namespace', you just add '.database' to the service-name:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-configmap
+  namespace: my-namespace
+data:
+  database_url: mongodb-service.database
+```
+
+There are components that cannot be added to a namespace, but live globally in the cluster (like PersistentVolume, Node or Namespace itself). To list all resources that cannot be added to a namespace, execute
+```sh
+kubectl api-resources --namespaced=false
+```
+
+
+</details>
+
+*****
