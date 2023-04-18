@@ -588,6 +588,120 @@ There are components that cannot be added to a namespace, but live globally in t
 kubectl api-resources --namespaced=false
 ```
 
+</details>
+
+*****
+
+<details>
+<summary>Video: 9 - Services (Connecting to Applications inside Cluster)</summary>
+<br />
+
+Each Pod has its own IP address, but when a Pod is replaced by a new one (e.g. because the old one crashed), it gets a new IP address.
+
+Services belong to a Pod (or a group of replicated Pods) and have a lifecycle independent from the Pods. They have a stable IP address and act as a load-balancer for the replicated Pods.
+
+There are three different types of Services:
+- ClusterIP
+- NodePort
+- LoadBalancer
+
+### ClusterIP Services
+
+This is the default type of services (if no type is specified). It is an internal service, not accessible from outside the cluster. But all Pods in the cluster can talk to this internal service.
+
+How does a Service know which Pods belong to it? The set of Pods targeted by a Service is determined by a selector. E.g. the selector `app: mongodb` (under the Service's spec > selector attribute) selects any Pod with the label `app: mongodb` (under the Pod's metadata > labels attribute). Selectors may also have multiple key value pairs. Then the Pods must have all these labels to get selected.
+
+A Pod may have multiple containers (a main container and its helper containers / side-cars). Each container gets its own port within the Pod. How does the Service know which container/port the request must be forwarded to? The attribute `targetPort` (under the Service's spec > ports attribute) matches the port of the container (under the Pod's spec > containers > ports attribute).
+
+#### Subtype Multi-Port Internal Service
+If a helper-container within a port must be accessible too (e.g. a mongodb-exporter used by a monitoring component), the Service for that Pod must have multiple ports:
+```yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongodb-service
+spec:
+  selector:
+    app: mongodb
+  ports:
+    - name: mongodb
+      protocol: TCP
+      port: 27017
+      targetPort: 27017
+    - name: mongodb-exporter
+      protocol: TCP
+      port: 9216
+      targetPort: 9216
+```
+
+Note that port definitions must be given a name as soon as you have more than one.
+
+#### Subtype Headless Internal Service
+
+When a client needs to communicate with one specific Pod directly, instead of a randomly (by the service) selected one. Use case: when Pod replicas are not identical, for example with stateful apps, like when only master is allowed to write to database.
+
+When a client needs to get the IP address of a Service, it can do a K8s DNS lookup and get the cluster IP address of the Service. But if you set the `clusterIP` attribute of a Service to be `None`, that Service won't get an IP address and the K8s DNS lookup will directly return the IP addresses of the Pods behind that Service.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongodb-service-headless
+spec:
+  clusterIP: None # <---
+  selector:
+    app: mongodb
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+```
+
+### NodePort Services
+NodePort Services are external services, i.e. they are directly accessible from outside the cluster. They are exposed on each node's IP at a static port. So the URL is the IP address of Worker Node plus the node port.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongodb-service-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: mongodb
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+      nodePort: 30000 # must be within the range of 30000 .. 32767
+```
+
+Note that a ClusterIP Service, to which the NodePort Service routes, is automatically created (using the `port` and `targetPort` attributes).
+
+If the Pods related to a NodePort Service are living on different Nodes, the NodePort Service will act as a load-balancer over these Nodes (same as load-balancing on Pod level, but on Node level).
+
+### LoadBalancer Services
+Open up ports on Nodes and making them directly accessible from outside the cluster is not secure as external traffic now has access to fixed ports on each Node.
+
+A better solution is to use a Service of type `LoadBalancer`. It exposes the Service externally using the cloud provider's load balancer. NodePort and ClusterIP Services, to which the external load balancer routes, are automatically created. The load balancer will be the only entry point to the services.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata: 
+  name: mongodb-service-loadbalancer
+spec:
+  type: LoadBalancer
+  selector:
+    app: mongodb
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+      nodePort: 30000 # must be within the range of 30000 .. 32767
+```
+
+In production you will either configure Ingress or a LoadBalancer service to make a Service accessible from outside the cluster.
 
 </details>
 
