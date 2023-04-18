@@ -18,6 +18,14 @@ So you look into different solutions and decide to use a container orchestration
 - Create a Kubernetes cluster (Minikube or LKE)
 
 **Steps to solve the tasks:**
+On my Mac with M2 processor the easiest way to install minikube is using the `homebrew` package manager:
+```sh
+brew update
+brew install minikube
+minikube start --driver docker
+minikube status
+```
+During `minikube` installation `kubectl` gets automatically installed too (as a dependency).
 
 </details>
 
