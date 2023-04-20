@@ -706,3 +706,200 @@ In production you will either configure Ingress or a LoadBalancer service to mak
 </details>
 
 *****
+
+<details>
+<summary>Video: 10 - Ingress (Connecting to Applications outside Cluster)</summary>
+<br />
+
+Instead of accessing your application via `http://<external-service-ip>:port` you would prefer something like `https://myapp.com/`. This is where Ingress comes in. It acts as the entry-point of your application and pass incoming requests over to an internal Service.
+
+### Configuration YAML
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+spec:
+  rules:
+  - host: myapp.com # map domain name to IP address of the node, which is the entrypoint
+    http: # 2nd step: incoming request gets forwarded to internal service
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: myapp-internal-service
+            port:
+              number: 8080
+```
+
+### Ingress Controller
+You need an implementation for Ingress, which is the Ingress Controller (a Pod). It
+- evaluates all the rules defined in Ingress configuration files,
+- manages redirections,
+- is the entry-point to the cluster.
+
+There are many third-party [implementations](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/). The implementation of K8s is the [Nginx Ingress Controller](https://www.nginx.com/products/nginx-ingress-controller/).
+
+In production environment you usually have load-balancer or another kind of proxy which acts as the only entry point to your k8s cluster and redirects incoming requests to the Ingress Controller.
+
+### Install Ingress in Minikube
+To install an Ingress Controller in Minikube, you can automatically start the K8s Nginx implementation of Ingress Controller by executing the following command:
+```sh
+minikube addons enable ingress
+# Nachdem das Addon aktiviert wurde, führen Sie bitte "minikube tunnel" aus, dann sind ihre Resourcen über "127.0.0.1" erreichbar
+
+# check
+kubectl get pods -n kube-system
+```
+
+### Configure Ingress for Access to K8s Dashboard
+Start K8s Dashboard in Minikube:
+```sh
+minikube dashboard # this opens the K8s dashboard in the default browser
+```
+
+Collect the information needed to configure Ingress:
+```sh
+# in a new terminal
+kubectl get namespaces
+# NAME                   STATUS   AGE
+# default                Active   4d22h
+# ingress-nginx          Active   23h
+# kube-node-lease        Active   4d22h
+# kube-public            Active   4d22h
+# kube-system            Active   4d22h
+# kubernetes-dashboard   Active   22h   <----
+
+kubectl get all -n kubernetes-dashboard
+# ...
+# NAME                                TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+# service/kubernetes-dashboard        ClusterIP   10.110.201.35   <none>        80/TCP     23h
+# ...
+```
+
+Create a file called `dashboard-ingress.yaml` with the following content:
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dashboard-ingress
+  namespace: kubernetes-dashboard
+spec:
+  rules:
+  - host: dashboard.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubernetes-dashboard
+            port: 80
+```
+
+Apply this config file and wait for an IP address to be assigned:
+```sh
+kubectl apply -f dashboard-ingress.yaml
+
+kubectl get ingress -n kubernetes-dashboard --watch
+# NAME                CLASS   HOSTS           ADDRESS        PORTS   AGE
+# dashboard-ingress   nginx   dashboard.com                  80      5s
+# dashboard-ingress   nginx   dashboard.com   192.168.49.2   80      32s
+```
+
+In order to map the defined host `dashboard.com` to the IP address assigned to ingress, we add an entry `192.168.49.2    dashboard.com` to the hosts file `/etc/hosts`. Now we can access the dashboard using `http://dashboard.com`.
+
+****
+Note: This seems not to work when using minikube with Docker driver.
+****
+
+### Define Multiple Paths for the Same Host
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+spec:
+  rules:
+  - host: myapp.com
+    http:
+      paths:
+      - path: /analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port: 3000
+      - path: /shopping
+        pathType: Prefix
+        backend:
+          service:
+            name: shopping-service
+            port: 8080
+```
+
+### Define Multiple Subdomains
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+spec:
+  rules:
+  - host: analytics.myapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port: 3000
+  - host: shopping.myapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: shopping-service
+            port: 8080
+```
+
+### Configuring TLS Certificate
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tls-example-ingress
+spec:
+  tls:
+  - hosts:
+    - myapp.com
+    secretName: myapp-secret-tls
+  rules:
+  - host: myapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: myapp-service
+            port: 3000
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: myapp-secret-tls
+  namespace: default
+data:
+  tls.crt: <base64 encoded cert>
+  tls.key: <base64 encoded key>
+type: kubernetes.io/tls # <-----
+```
+
+</details>
+
+*****
