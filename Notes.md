@@ -903,3 +903,129 @@ type: kubernetes.io/tls # <-----
 </details>
 
 *****
+
+<details>
+<summary>Video: 11 - Volumes - Persisting Application Data</summary>
+<br />
+
+K8s offers no data persistence out of the box.
+
+A volume is a directory (with some data in it), which is accessible to the containers in a Pod. Persistent volumes exist beyond the lifetime of a Pod, even beyond the lifetime of the cluster. Volumes must be available on all nodes, because it is not known on which node a new pod gets started when the old one is replaced.
+
+ The way to persist data in K8s using volumes is with these 3 resources:
+- Persistent Volume (PV): Storage in the cluster that has been provisioned by an administrator or dynamically provisioned using Storage Classes
+- Persitent Volume Claim (PVC): A request for storage by a user; similar to Pods, while Pods consume node resources, PVCs consume PV resources
+- Storage Class (SC): SC provisions PV dynamically when PVC claims it
+
+### Persitent Volume
+Persistent Volumes are NOT namespaced, so PV resource is accessible to the whole cluster. Depending on storage type, spec attributes differ. In official documentation you can find a complete list of more than 25 storage backends supported by K8s.
+
+PV is configured in a yaml file (kind: `PersistentVolume`). The spec attribute differs depending on the storage type. The following is an example of a Persitent Volume using an NFS server:
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv0003
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: slow
+  mountOptions:
+    - hard
+    - nfsvers=4.1
+  nfs:
+    path: /tmp
+    server: 172.17.0.2
+```
+
+Persistant Volume is just an abstraction. The real physical storage resource (e.g. local filesystem, remote NFS, cloud storage) has to be made available to the cluster and provisioned by a system administrator. It can be seen as a plugin to the cluster.
+
+Local volumes are tied to one specific node. And they don't survive a cluster crash. For database storage you should always use a remote volume type.
+
+### Persistent Volume Claim
+System administrators provision the persistent volume resources for a cluster. And K8s users (developers) have to make these volumes available for their Pods. They can claim volume resources using Persistent Volume Claims (PVC). PVCs are also createed using a yaml configuration. Here's an example:
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: slow
+```
+
+Based on the specified requirements of the PVC, the best matching persistent volume resource is chosen. The volume claimed in the PVC can then be made available to the Pod by referencing the PVC:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+spec:
+  containers:
+    name: nginx
+    image: nginx
+    volumeMounts: # mounting the volume into the container
+    - name: my-pod-dir
+      mountPath: "/var/www/html"
+  volumes: # mounting the volume into the Pod
+    - name: my-pod-dir
+      persistentVolumeClaim:
+        claimName: my-pvc
+```
+
+Note that PVCs must be in the same namespace as the related Pod, whereas PVs are not namespaced and are available for all nodes.
+
+### Summary on the Levels of Abstraction
+- The Pod requests the volume through a PVC.
+- The PVC tries to find a PV in the cluster satisfying the PVCs requirements.
+- The PV has the actual storage backend.
+
+The Volume is mounted into the Pod and then from the Pod into the container(s). A Pod (and a container) can mount multiple volumes of different type.
+
+ConfigMap and Secret are local volume types directly managed by K8s (see next video).
+
+### Storage Class
+In a cluster with hundreds of Pods needing persistent volume the system administrator would have to define many PVs manually. A tedious task that can quickly get very time consuming and messy. Storage classes provision Persistent Volumes dynamically and automatically whenever a PVC claims it. They are also configured in a yaml file. The storage backend is defined in the `provisioner` attribute:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: slow
+provisioner: kubernetes.io/aws-ebs # internal provisioner (prefix kubernetes.io)
+parameters:
+  type: io1
+  iopsPerGB: "10"
+  fsType: ext4
+```
+
+Another example of a storage class using an external provisioner:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: example-nfs
+provisioner: example.com/external-nfs # external provisioner
+parameters:
+  server: nfs-server.example.com
+  path: /share
+  readOnly: "false"
+```
+
+Storage Class is another abstraction level. It abstracts the underlying storage provider and defines the parameters for that storage.
+
+If you want to let a storage class automatically provision a PV for your PVC, you can add a `storageClassName` attribute to your PVCs `spec`, referencing the required Storage Class. When the Pod then claims storage via the PVC, the PVC requests storage from the Storage Class, which then creates a PV that meets the need of the claim using the provisioner from the actual storage backend.
+
+</details>
+
+*****
