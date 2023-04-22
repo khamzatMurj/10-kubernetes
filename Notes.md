@@ -1029,3 +1029,129 @@ If you want to let a storage class automatically provision a PV for your PVC, yo
 </details>
 
 *****
+
+<details>
+<summary>Video: 12 - ConfigMap & Secret Volume Types</summary>
+<br />
+
+With ConfigMap and Secret you can pass individual key-value pairs to your Pods as we've seen in video 7:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-configmap
+data:
+  database_url: mongodb-service
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+type: Opaque
+data:
+  mongo-root-username: bW9uZ28=
+  mongo-root-password: c2VjcmV0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-express
+  labels:
+    app: mongo-express
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-express
+  template:
+    metadata:
+      labels:
+        app: mongo-express
+    spec:
+      containers:
+      - name: mongo-express
+        image: mongo-express
+        ports:
+        - containerPort: 8081
+        env:
+        - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: username
+        - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: password
+        - name: ME_CONFIG_MONGODB_SERVER 
+          valueFrom: 
+            configMapKeyRef:
+              name: mongodb-configmap
+              key: db_host
+```
+
+But how do you pass whole configuration files or certificate files to your Pods?
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config-file
+data:
+  mosquitto.conf: |
+    log_dest stdout
+    log_type all
+    log_timestamp true
+    listener 9001 
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mosquitto-secret-file
+type: Opaque
+data:
+  secret.file: |
+    c29tZSBzdXBlcnNlY3JldCBmaWxlIGNvbnRlbnRzIG5vYm9keSBzaG91bGQgc2Vl
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  labels:
+    app: mosquitto
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:1.6.2
+          ports:
+            - containerPort: 1883
+          volumeMounts:
+            - name: mosquitto-conf
+              mountPath: /mosquitto/config
+            - name: mosquitto-secret
+              mountPath: /mosquitto/secret
+              readOnly: true
+      volumes:
+        - name: mosquitto-conf
+          configMap:
+            name: mosquitto-config-file
+        - name: mosquitto-secret
+          secret:
+            secretName: mosquitto-secret-file
+```
+
+See demo project 2 for more information.
+
+</details>
+
+*****
