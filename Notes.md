@@ -1155,3 +1155,98 @@ See demo project 2 for more information.
 </details>
 
 *****
+
+<details>
+<summary>Video: 13 - StatefulSet - Deploying Stateful Applications</summary>
+<br />
+
+Stateless applications are deployed in Kubernetes using Deployment, an abstraction over a number of replicated, interchangeable (i.e. from a client's point of view identical) Pods.
+
+Stateful applications are deployed using StatefulSet, which is also an abstraction over a number of replicated Pods, but the Pods are not interchangeable and when a Pod dies and needs to be re-scheduled, it gets the same ID as before. So replication is a more complex task with StatefulSets than it is with Deployments.
+
+The sticky identifier is made up of the name of the StatefuleSet followed by an ordinal number (${statefull-set-name}-${ordinal}).
+
+StatefulSets are used to deploy applications like databases. The first Pod takes the role of the master. Updates are only possible against the master Pod. Every additional Pod that gets scheduled is a worker Pod and synchronizes its data with the previous Pod. Worker Pods can only serve data queries. When Pods need to be down-scheduled, the first one to be deleted is the last created one. That's why fixed identifiers holding an ordinal are needed.
+
+When a Pod of a StatefulSet gets deleted and re-scheduled, it is re-assigned the same volume. So each Pod needs its own PersistentVolume which must use a remote storage system, otherwise it could not be guaranteed, that it is accessable from the new Pod (that might be scheduled on a different Node than its predecessor).
+
+With StatefulSets each Pod gets its individual DNS name (made up of ${pod-name}.${governing-service-name}).
+
+It is important to mention, that a lot of the additional complexity (like configuring the cloning and data synchronization, make remote storage available, make backups, etc.) has to be managed by the developer. Stateful applications and containerized environments are not a really good match.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 14 - Managed Kubernetes Services</summary>
+<br />
+
+There are two options to create a Kubernetes cluster on a cloud platform:
+- create your own cluster from scratch
+- use a managed K8s service
+
+Creating your own cluster is very time consuming as you have to setup and manage all the components (like control plane nodes) and resources (e.g. storage) by yourself.
+
+When you use a managed Kubernetes service of the cloud provider, you only care about (and pay for) the worker nodes. You can use cloud storage solutions and a cloud native load balancer. The disadvantage is, that you depend on cloud provider specific components (vendor lock). This risk can be mitigated using Infrastructure As Code tools like Terraform or Ansible, which abstract away the underlying cloud provider.
+
+### Examples of Managed Kubernetes Services
+- AWS: Elastic Kubernetes Service (EKS)
+- Azure: Azure Kubernetes Service (AKS) 
+- Google: Google Kubernetes Engine (GKE) 
+- Linode: Linode Kubernetes Engine (LKE)
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 15 - Helm - Package Manager for Kubernetes</summary>
+<br />
+
+### Helm as a Package Manager
+Helm is the package manager for Kubernetes. Think of it like apt/yum for Kubernetes. It helps in packaging YAML files and distributing them in public and private repositories.
+
+To deploy your application into a K8s cluster you usually have to write a lot of K8s configuration/manifest files. These files can be bundeled into a Helm package which is called Helm Chart. A Helm chart contains a chart description (Chart.yaml) and one or more templates containing K8s manifest files. Helm is the tool managing these charts. Helm charts can be pushed to a Helm repository and downloaded by others needing to deploy ypur application. There a public repos, but you can also have your own private repo in your company (e.g. Nexus).
+
+There are also a lot of official charts available for applications / components of general interest like Mysql, MongoDB, ElasticSearch or Prometheus. So if you want to use these components in your K8s cluster, you can just download the related Helm charts (often provided by the official creator of the component) and don't have to write all the needed K8s configuration files by yourself.
+
+To find existing charts you can either execute `helm search <keywords>` on the command line or go to [Helm Hub](https://artifacthub.io/) and browse available packages.
+
+### Helm as a Templating Engine
+When deploying a couple of microservices, you often write K8s configurations files that are more or less the same and differ only in a few lines. With Helm Charts you can write template files containing the common part and placeholders like `{{ .Values.container.image }}`, from which the concrete configuration files will then be generated. The values are defined in a separate file called `values.yaml`.\
+Another use case is to deploy the same bundle of K8s components across multiple environments (e.g. Development, Staging, Production).
+
+### Helm Chart Structure
+A Helm Chart directory has the following structure:
+```txt
+mychart/          -> top level folder defining the name of the chart
+  Chart.yaml      -> meta info about the chart
+  values.yaml     -> values needed in the template files
+  charts/         -> dependencies (oder charts)
+  templates/      -> the actual template files of this chart
+  ...
+```
+
+To create the K8s configuration files execute `helm install --values=overlays/dev/values.yaml <chartname>`. The `values.yaml` file contains the default values. They are overridden/merged with the values in a file provided with the `--values` option resulting in the final `.Values` object referenced in the template files. As an alternative (for quick changes) it is also possible to override values with the `--set` option like this: `helm install --set version=2.0.0 <chartname>`.
+
+### Helm Release Management
+**Helm Version 2**\
+Helm is divided into two parts, a Helm Client (CLI) and Server (called Tiller). Tiller is running in the K8s cluster where you want to deploy your components. When `helm install <chartname>` is executed, the YAML files are sent to the Tiller, which applies them on the K8s cluster. Tiller stores all the files it received thus creating a history of chart executions. You may then call `helm upgrade <chartname>` to just apply the changes to the existing deployment instead of creating a new one. You may also rollback to earlier versions using the `helm rollback <chartname>` command.
+
+**Helm Version 3**\
+Because Tiller has too much power inside the K8s cluster (it may create, update, delete components), it was seen as too big a security issue and got removed completely in Helm version 3.
+
+In Helm 3, an application's state is tracked in-cluster by a pair of objects:
+- the release object: represents an instance of an application
+- the release version secret: represents an application's desired state at a particular instance of time (the release of a new version, for example)
+
+A `helm upgrade` requires an existing release object (which it may modify) and creates a new release version secret that contains the new values and rendered manifest.
+
+### Links
+- [Install Helm](https://helm.sh/docs/intro/install/)
+- [Helm Hub](https://artifacthub.io/)
+
+</details>
+
+*****
