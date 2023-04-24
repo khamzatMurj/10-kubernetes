@@ -38,7 +38,7 @@ kubectl get nodes
 ```
 
 #### Steps to deploy a replicated stateful MongoDB service and configure data persistence for MongoDB with Linode’s cloud storage in LKE cluster using a Helm chart
-**Stae 1:** Install Helm\
+**Step 1:** Install Helm\
 If you haven't installed Helm yet, [install it now](https://helm.sh/docs/intro/install/). On a Mac, the easiest way to install Helm is to execute
 ```sh
 brew update
