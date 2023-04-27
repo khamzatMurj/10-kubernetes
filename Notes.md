@@ -126,9 +126,17 @@ Minikube implements a local K8s cluster. This is useful for local K8s applicatio
 - [Installation Guide for Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
 
 ```sh
+# using docker
 brew update
 brew install minikube
-minikube start --driver docker
+minikube start --driver=docker
+minikube status
+
+# using hyperkit
+brew update
+brew install hyperkit
+brew install minikube
+minikube start --vm-driver=hyperkit
 minikube status
 
 # kubectl has been installed as a dependency of minikube
@@ -144,7 +152,7 @@ kubectl get nodes
 <summary>Video: 5 - Main kubectl commands</summary>
 <br />
 
-Kubectl is a CLI tool to interact with your K8s cluster. In order for kubectl to access a K8s cluster, it needs a kubeconfig file, which is created automatically when deploying your minikube cluster. By default, the config file is located at `~/.kube/config`.
+Kubectl is a CLI tool to interact with your K8s cluster. In order for kubectl to access a K8s cluster, it needs a kubeconfig file, which is created automatically when deploying your minikube cluster. By default, the config file is located at `~/.kube/config`. This location can be overridden by exporting an environment variable KUBECONFIG.
 
 ### Basic kubectl Commands
 
@@ -190,6 +198,9 @@ kubectl options
 kubectl help
 kubectl create --help
 kubectl create deployment --help
+
+# metrics
+kubectl top # returns current CPU and memory usage for a cluster’s pods or nodes, or for a particular pod or node if specified
 ```
 
 </details>
@@ -1540,6 +1551,172 @@ helm uninstall mongodb
 Note that the PersistentVolumes that have been created when installing the mongodb chart, don't get deleted by `helm uninstall`. This is a security feature, to keep the data in case you want to re-install the database later. If you want to delete the volumes, you'll have to do it manually in the Linode management web-console.
 
 When you are done with the Kubernetes cluster on Linode, just delete it. Note that the volumes won't be deleted even if you delete the whole K8s cluster. You'll have to delete them manually.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 17 - Deploying Images in Kubernetes from private Docker repository</summary>
+<br />
+
+To pull a Docker image from a private repository into your K8s cluster, you have to configure explicit access from the K8s cluster to the private Docker registry. So you have to create a Secret component in the K8s cluster containing the credentials for the Docker registry. And then you have to use this Secret in the Deployment/Pod (`imagePullSecrets`).
+
+For the demo there is a Docker image available in a private AWS ECR registry. And K8s is running in a local minikube cluster.
+
+### Create a Secret component holding the Credentials for the AWS ECR registry
+To create a Secret holding the credentials for docker-login, we create a configuration file of the following type:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: <secret-name>
+data:
+  .dockerconfigjson: <base64-encoded-contents-of ~/.docker/config.json file>
+type: kubernetes.io/dockerconfigjson
+```
+
+To get the `~/.docker/config.json` file for our private AWS ECR registry, we have to login to that registry. We can either get the password and the do a docker login like this: 
+```sh
+aws ecr get-login-password --region <your region>
+# => pwd
+docker login -u AWS -p <pwd> <registry-host>
+```
+
+or we can directly execute the following command:
+```sh
+aws ecr get-login-password --region <your region> | docker login --username AWS --password-stdin <registry-host>
+```
+
+You can find this command in the AWS management web console. Navigate to Amazon ECR > Repositories, click on your repository and press the "View push commands" button.
+
+The second way is the preferred one because you don't have to type in your ECR password in your command line (writing it to the command line history).
+
+Executing the above docker-login command created an entry in the file `~/.docker/config.json` that looks like this:
+```json
+{
+    "auths": {
+        "<registry-host>": {},
+    },
+    "credsStore": "osxkeychain"
+}
+```
+
+If we put this content base64 encoded into the Secret component, we won't be able to use it in our minikube cluster, because the minikube cluster is running in its own docker container and does not have access to the osx keychain. So we have to execute the docker-login command from within the minikube container.
+
+```sh
+minikube ssh
+
+pwd
+# => /home/docker
+
+docker login -u AWS -p <pwd> <registry-host>
+cat .docker/config.json
+# =>
+# {
+# 	"auths": {
+# 		"<registry-host>": {
+# 			"auth": "QVdTOmV5SndZWGxzYjJGa0lqb2.....ESTFPRFEyT1RWOQ=="
+# 		}
+# 	}
+# }
+
+exit
+```
+
+Now we have to copy that config.json from the minikube container to our ~/.docker folder:
+```sh
+scp -i $(minikube ssh-key) docker@$(minikube ip):.docker/config.json ~/.docker/minikube-config.json
+```
+
+****
+Note: This command does not work with minikube running in a docker container. You won't be able to connect to the IP address returned by `minikube ip`. To get the content we have to either copy it manually or mount a directory into minikube:
+```sh
+minikube mount ~/.docker:/home/docker/.docker
+
+minikube ssh
+docker login -u AWS -p eyJwYXlsb2FkI.....ODI2NjgyMDF9 369076538622.dkr.ecr.eu-central-1.amazonaws.com
+exit
+
+cat ~/.docker/config.json
+```
+****
+
+With these preparations we are ready to get the base64 encoded content of the file `~/.docker/minikube-config.json` and create a Secret from it:
+```sh
+cat ~/.docker/minikube-config.json | base64
+# => ewoJImF1dGhzIjogewoJCSI.....T09IgoJCX0KCX0KfQ==
+```
+
+Create a file called `docker-secret.yaml` with the following content:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-registry-key
+data:
+  .dockerconfigjson: ewoJImF1dGhzIjogewoJCSI.....T09IgoJCX0KCX0KfQ==
+type: kubernetes.io/dockerconfigjson
+```
+
+Apply it with `kubectl apply -f docker-secret.yaml`.
+
+Another way of creating the Secret, once you have the config.json file, is to use the following kubectl command:
+```sh
+kubectl create secret generic my-registry-key \
+  --from-file=.dockerconfigjson=.docker/config.json \
+  --type=kubernetes.io/dockerconfigjson
+```
+
+And finally you can also combine the docker login command with the create secret command:
+```sh
+kubectl create secret docker-registry my-registry-key \
+  --docker-server=<registry-host> \
+  --docker-username=AWS \
+  --docker-password=<pwd>
+```
+
+This command does a login to the private docker registry using the given username and password and creates a Secret containing the base64 encoded content of the config.json file that would have been created by a regular `docker login` command. Even if this last way of creating the secret is the most comfortable one, be aware that you cannot create a secret containing the credentials for multiple registries. With the previous two ways you can login to multiple docker registries resulting in a config.json file that contains the credentials for all of them. 
+
+### Create a Deployment Component Using the Docker Registry Secret
+Create a file called `my-app-deployment.yaml` with the following content:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  labels:
+    app: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+      containers:
+      - name: my-app
+        image: <registry-host>/my-app:1.0
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 3000
+```
+
+Apply it to the cluster:
+```sh
+kubectl apply -f my-app-deployment.yaml
+
+kubectl get pods
+kubectl describe pod <pod-name>
+# => Events show you whether the image was pulled successfully or not
+```
+
+Final note: The secret have to be in the same namespace as the deployment using it. So if you have three deployments in three different namespaces and all of them pull an image from the same private repository, you have to create three different secrets (containing the same .docker/config.json file) in all three namespaces.
 
 </details>
 
