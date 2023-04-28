@@ -1721,3 +1721,23 @@ Final note: The secret have to be in the same namespace as the deployment using 
 </details>
 
 *****
+
+<details>
+<summary>Video: 18 - Kubernetes Operators for Managing Complex Applications</summary>
+<br />
+
+Stateless applications are totally managed by K8s. There is no application specific knowledge needed for controlling the lifecycle of these components. The control loop contantly checks the actual state, compares it with the desired state and tries to resolve differences.
+
+With stateful applications, K8s can't automate this process natively. Stateful applications need constant management and syncing after deployment. So stateful applications, like databases, need to be operated. But instead of a human operator, K8s operators are automated and scripted. They can be seen as a custom control loop, that watches for changes in the application state. Did a replica die? It creates a new one. Did an application configuration change? It applies the up-to-date configuration. Did the application image version get updated? It restarts it with a new image version. For all that it makes use of CRDs (Custom Resource Definition), which are custom K8s components. It includes domain or application-specific knowledge, e.g. for a MySql database this could be:
+- how to create mysql cluster
+- how to run it
+- how to synchronize the data
+- how to update
+- how to do backups
+- etc.
+
+Operators are often created / provided by the official maintainers of an application (like prometheus, postgres, elastic-search, mysql, etcd store, ...). There is an [OperatorHub](https://operatorhub.io/) website, or you can find operators on GitHub, etc... If you want / need to write your own operator, there's also an Operator SDK available, that supports you in this task.
+
+</details>
+
+*****
