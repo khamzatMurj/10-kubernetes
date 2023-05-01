@@ -1830,7 +1830,7 @@ kubectl get statefulsets
 # alertmanager-prometheus-kube-prometheus-alertmanager   1/1     22h
 # prometheus-prometheus-kube-prometheus-prometheus       1/1     22h
 
-kubectl describe prometheus-prometheus-kube-prometheus-prometheus > prometheus.yaml
+kubectl describe statefulset prometheus-prometheus-kube-prometheus-prometheus > prometheus.yaml
 # =>
 # ...
 # Volumes:
