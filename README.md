@@ -13,3 +13,5 @@ And finally it contains the following demo projects:
 - [Deploy Mosquitto App using Local Volume Types ConfigMap and Secret](./demo-projects/2-configmap-secret-volume-types/)
 - [Install Stateful Service Using Helm](./demo-projects/3-install-stateful-service-using-helm/)
 - [Deploy Image from Private Docker Registry](./demo-projects/4-deploy-image-from-private-docker-registry/)
+- [Prometheus Monitoring in K8s Cluster](./demo-projects/5-prometheus-in-k8s-cluster/)
+
