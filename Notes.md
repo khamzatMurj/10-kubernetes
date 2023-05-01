@@ -1741,3 +1741,149 @@ Operators are often created / provided by the official maintainers of an applica
 </details>
 
 *****
+
+<details>
+<summary>Video: 19 - Helm and Operator Demo</summary>
+<br />
+
+### Prometheus Architecture
+- The **Prometheus Server** retrieves, processes and stores metrics data and provides HTTP endpoints accepting PromQL queries.
+- The **Alertmanager** can be used to send alerts (e-Mail, Slack, etc.) based on the data the Prometheus server collected.
+
+### How to deploy the various Prometheus components in a K8s cluster?
+You can either manually create all the configuration files for the needed components (but there are a lot of components, so this is a very time consuming way of deploying Prometheus) and apply them in the right order, or you can use an operator that manages the combination of all the compontents that make up the Prometheus stack as one unit. The most effitient way of deploying an operator is using a Helm chart solving this task. The Helm chart will do the initial setup of the Prometheus Operator, Prometheus Server and Alertmanager, and the operator will then manage the running Prometheus setup.
+
+### Setup Prometheus with a Helm Chart
+#### Prometheus Community
+Open your browser and navigate to the [Prometheus Community on Github](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack). Here you'll find the commands to install the Helm Chart:
+
+```sh
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm install prometheus prometheus-community/kube-prometheus-stack
+# =>
+# kube-prometheus-stack has been installed. Check its status by running:
+kubectl --namespace default get pods -l "release=prometheus"
+
+# Visit https://github.com/prometheus-operator/kube-prometheus for instructions on how to create & configure Alertmanager and Prometheus instances using the Operator.
+```
+
+****
+Alternative: **Bitnami**
+Open your browser and navigate to the [Bitnami Prometheus Operator](https://bitnami.com/stack/prometheus-operator/helm) website. Here you'll find the commands to install the Helm Chart:
+
+```sh
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+helm install prometheus bitnami/kube-prometheus
+# =>
+# Watch the Prometheus Operator Deployment status using the command:
+kubectl get deploy -w --namespace default -l app.kubernetes.io/name=kube-prometheus-operator,app.kubernetes.io/instance=prometheus
+
+# Watch the Prometheus StatefulSet status using the command:
+kubectl get sts -w --namespace default -l app.kubernetes.io/name=kube-prometheus-prometheus,app.kubernetes.io/instance=prometheus
+
+# Prometheus can be accessed via port "9090" on the following DNS name from within your cluster:
+# prometheus-kube-prometheus-prometheus.default.svc.cluster.local
+
+# To access Prometheus from outside the cluster execute the following commands:
+echo "Prometheus URL: http://127.0.0.1:9090/"
+kubectl port-forward --namespace default svc/prometheus-kube-prometheus-prometheus 9090:9090
+
+# Watch the Alertmanager StatefulSet status using the command:
+kubectl get sts -w --namespace default -l app.kubernetes.io/name=kube-prometheus-alertmanager,app.kubernetes.io/instance=prometheus
+
+# Alertmanager can be accessed via port "9093" on the following DNS name from within your cluster:
+# prometheus-kube-prometheus-alertmanager.default.svc.cluster.local
+
+# To access Alertmanager from outside the cluster execute the following commands:
+echo "Alertmanager URL: http://127.0.0.1:9093/"
+kubectl port-forward --namespace default svc/prometheus-kube-prometheus-alertmanager 9093:9093
+``` 
+
+For detailed information on all the parameters of the Helm chart, open the [Bitnami Prometheus Helm Charts on Github](https://github.com/bitnami/charts/tree/main/bitnami/kube-prometheus/) page.
+****
+
+### Understand the created Prometheus components
+```sh
+kubectl get all
+```
+There are
+- 2 Stateful Sets: The Prometheus Server and the Alertmanager
+- 3 Deployments: The Prometheus Operator (that created the two Stateful Sets), Grafana and Kube State Metrics (a dependency of the Prometheus Operator Helm Chart scraping K8s components)
+- 3 ReplicaSets created by the deployments
+- 1 Node Exporter Daemon Set (Daemon Sets run on every worker node) connecting to every worker node and translating node metrics (like CPU usage, load on the server, etc...) to Prometheus metrics
+- a bunch of Pods
+- a bunch of Services
+- a bunch of ConfigMaps (e.g. how to connect to default metrics, prometheus rulefiles)
+- a bunch of Secrets (certificates, usernames & passwords for Grafana, Prometheus, Operator, etc.)
+- a bunch of CRDs (Custom Resource Definitions)
+
+So besides the whole monitoring stack being deployed, we also get a monitoring configuration for the K8s cluster including both nodes and components monitoring.
+
+You don't have to know all the details of these components. Important to know is how to add/adjust alert rules and how to adjust Prometheus configuration.
+
+```sh
+kubectl get statefulsets
+# =>
+# NAME                                                   READY   AGE
+# alertmanager-prometheus-kube-prometheus-alertmanager   1/1     22h
+# prometheus-prometheus-kube-prometheus-prometheus       1/1     22h
+
+kubectl describe prometheus-prometheus-kube-prometheus-prometheus > prometheus.yaml
+# =>
+# ...
+# Volumes:
+#    config:
+#     Type:        Secret (a volume populated by a Secret)
+#     SecretName:  prometheus-prometheus-kube-prometheus-prometheus
+#     Optional:    false
+# ...
+#    prometheus-prometheus-kube-prometheus-prometheus-rulefiles-0:
+#     Type:      ConfigMap (a volume populated by a ConfigMap)
+#     Name:      prometheus-prometheus-kube-prometheus-prometheus-rulefiles-0
+#     Optional:  false
+
+kubectl get secret prometheus-prometheus-kube-prometheus-prometheus -o jsonpath="{.data.prometheus\.yaml\.gz}" | base64 -d | gunzip > prometheus-config.yaml
+
+kubectl get configmap prometheus-prometheus-kube-prometheus-prometheus-rulefiles-0 -o yaml > rules.yaml
+```
+
+### Access Grafana
+```sh
+kubectl get services
+# => 
+# NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+# ...
+# prometheus-grafana   ClusterIP   10.107.198.230   <none>        80/TCP    22h
+# ...
+```
+
+Grafana is an internal service. In production environment you would usually define an ingress to make it accessible from outside of the cluster. To access it for this demo, we just define a port-forwarding:
+```sh
+kubectl get pods
+# =>
+# NAME                                                     READY   STATUS    RESTARTS        AGE
+# alertmanager-prometheus-kube-prometheus-alertmanager-0   2/2     Running   1 (4m50s ago)   4m53s
+# prometheus-grafana-6984c5759f-cd6zw                      3/3     Running   0               4m56s
+# prometheus-kube-prometheus-operator-655c5b45c7-tlfvc     1/1     Running   0               4m56s
+# prometheus-kube-state-metrics-7fbdd95dc4-bllf5           1/1     Running   0               4m56s
+# prometheus-prometheus-kube-prometheus-prometheus-0       2/2     Running   0               4m53s
+# prometheus-prometheus-node-exporter-jw2gg                1/1     Running   0               4m56s
+
+kubectl port-forward prometheus-grafana-6984c5759f-cd6zw 3000
+```
+
+Now we can access the Grafana UI in the browser on `localhost:3000`, username `admin` and password `prom-operator` (looked up in the prometheus operator [chart documentation](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml) -> `adminPassword`).
+
+### Access Prometheus UI
+Prometheus itself provides a UI too. It can be access on port 9090 of the related pod, so let's setup a port-forwarding too:
+```sh
+kubectl port-forward prometheus-prometheus-kube-prometheus-prometheus-0 9090
+```
+
+Now access the Prometheus UI on `localhost:9090`. Under 'Status' > 'Rules' you can find all the alerting rules and under 'Status' > 'Targets' you can find all the metric endpoints that are being scraped.
+
+</details>
+
+*****
