@@ -1887,3 +1887,136 @@ Now access the Prometheus UI on `localhost:9090`. Under 'Status' > 'Rules' you c
 </details>
 
 *****
+
+<details>
+<summary>Video: 20 - Secure your cluster - Authorization with RBAC</summary>
+<br />
+
+### Authentication
+Cluster administrators can choose from different authentication strategies like
+  - static token file (a csv file with a minimum of 3 columns: token, user name, user uid, followed by optional group names)
+  - client certificates
+  - 3rd party identity service (like LDAP)
+
+The API server (part of the K8s control plane) handles authentication of all the requests using the configured authentcation strategy.
+
+### Authorization
+K8s supports multiple authorization modules, such as
+- ABAC mode (Attribute Based Access Control)
+- RBAC mode (Role Based Access Control)
+- Webhook mode
+
+On cluster creation, admins configure the authorization modules that should be used. K8s checks each module, and if any module authorizes the request, then the request can proceed.
+
+### Role & RoleBinding
+The **Role** component allows you to define namespace permissions. It is bound to a specific namespace and allows you to specify what resources you can in that namespace and what actions can be performed on these resources (access permissions).
+
+Linking a role to a specific person / user or a group of users is the purpose of the **RoleBinding** component.
+
+### ClusterRole & ClusterRoleBinding
+As Role is bound to a namespace it cannot be used for administrators since they need cluster wide permissions. **ClusterRole** and **ClusterRoleBinding** are similar to Role and RoleBinding but not related to a namespace but to a whole cluster and can thus be used to define the permissions for admins and admin groups.
+
+### Users, Groups and Service-Accounts in Kubernetes
+K8s doesn't manage users natively. There is no K8s resource representing normal user accounts.
+
+Applications and services also access the cluster. For this purpose there is (unlike for human users) a specific K8s component representing applications called **ServiceAccount**. It can be created like this:
+`kubectl create serviceaccount <service-account-name>`. ServiceAccounts can be bound to Roles or ClusterRoles via RoleBinding or ClusterRoleBinding.
+
+### Example Configuration Files
+See the [K8s Documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+
+**Role**
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: developer
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "watch", "create", "list"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["my-configmap"] # restrict permissions to a specific ConfigMap only
+  verbs: ["update", "get"]
+```
+
+**RoleBinding**
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding
+  namespace: default
+subjects:
+# You can specify more than one "subject"
+- kind: User
+  name: jane # "name" is case sensitive
+  apiGroup: rbac.authorization.k8s.io
+- kind: Group
+  name: developers
+  apiGroup: rbac.authorization.k8s.io
+- kind: ServiceAccount
+  name: jenkins
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  # "roleRef" specifies the binding to a Role / ClusterRole
+  kind: Role # this must be Role or ClusterRole
+  name: developer # this must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Note that a RoleBinding can also reference a ClusterRole to grant the permissions defined in that ClusterRole to resources inside the RoleBinding's namespace. This kind of reference lets you define a set of common roles across your cluster, then reuse them within multiple namespaces.
+
+**ClusterRole**
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # "namespace" omitted since ClusterRoles are not namespaced
+  name: cluster-admin
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "create", "list", "delete", "update"]
+```
+
+**ClusterRoleBinding**
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admin-binding
+subjects:
+- kind: Group
+  name: cluster-admins
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+```
+
+### Checking API Access
+Kubectl provides an `auth can-i` subcommand to quickly check wether the current user can perform a given action:
+```sh
+kubectl auth can-i create deployments --namespace dev
+```
+
+Admins can also check the permissions of other users:
+```sh
+kubectl auth can-i list secrets --namespace dev --as dave
+kubectl auth can-i list pods --namespace target --as system:serviceaccount:dev:dev-sa
+```
+
+### Links
+- [Authentication](https://kubernetes.io/docs/reference/access-authn-authz/authentication/)
+- [3 Realistic Approaches to K8s RBAC](https://thenewstack.io/three-realistic-approaches-to-kubernetes-rbac/)
+
+</details>
+
+*****
