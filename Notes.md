@@ -2020,3 +2020,40 @@ kubectl auth can-i list pods --namespace target --as system:serviceaccount:dev:d
 </details>
 
 *****
+
+<details>
+<summary>Video: 21 - Microservices in Kubernetes</summary>
+<br />
+
+### Introduction to Microservices
+- Microservices are an architectural approach to software development.
+- Software is composed of small independent services (instead of having a huge monolith).
+- Each business functionality is encapsulated into own Microservice (MS).
+
+Benefits:
+- Each MS can be developed, packaged and released independently.
+- Changes in one MS don't affect other MS.
+- Less interconnected logic, loosely coupled
+- Each MS can be developed by separate developer teams.
+
+### Communication between Microservices
+The communication between microservices can happen in different ways:
+- Service-to-service API calls (direct communication)
+- Message-based communication (through a message broker, like Rabbitmq or Redis)
+- Service-mesh architecture (each MS has its own helper proxy / sidecar container handling the communication for that specific MS, e.g. Istio, Linkerd, HashiCorp Consul)
+
+### Deploying a Microserices Application
+To successfully deploy a MS application into  a K8s cluster, you need to know
+- which services you need to deploy
+- which service is talking to which other service
+- how are they communicating
+- which database (or other 3rd party services) are they using
+- on which port does each service run
+
+Then you have to prepare the K8s environment by deploying any needed 3rd party apps and creating the Secrets and ConfigMaps for the microservices. And finally you can create Deployment and Service for each microservice.
+
+When deploying multiple similar services to K8s, you can use a helm chart with one common template and replace specific values for each service on the fly during deployment.
+
+</details>
+
+*****
