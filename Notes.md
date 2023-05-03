@@ -2057,3 +2057,574 @@ When deploying multiple similar services to K8s, you can use a helm chart with o
 </details>
 
 *****
+
+<details>
+<summary>Video: 22 - Demo project: Deploy Microservices Application</summary>
+<br />
+
+We are going to deploy the microservices application in the GitHub repository [nanuchi/microservices-demo](https://github.com/nanuchi/microservices-demo) into a Linode K8s cluster. To do this, we don't need to know and understand the source code of the various microservices. What you need to know is
+- what microservices you have to deploy (image names)
+- what environment variables they need
+- on which ports they are listening
+- how they are connected
+- what 3rd party services or databases they are using
+- which service(s) must be accessible from outside of the cluster
+
+Developers tell us that the application is made up of the following microservices:
+- 1. Frontend: entrypoint, accessible from outside; port 8080; talking to 2, 3, 4, 7, 9, 10
+- 2. AdService: port 9555
+- 3. CheckoutService: port 5050; talking to 4, 5, 6, 7, 8, 10
+- 4. CurrencyService: port 7000
+- 5. EmailService: port 8080
+- 6. PaymentService: port 50051
+- 7. ShippingService: port 50051
+- 8. ProductCatalogService: port 3550
+- 9. RecommendationService: port 8080; talking to 8
+- 10. CartService: port 7070; storing data in Redis In-Memory cache
+- 11. LoadGenerator: not needed in production, just needed for doing load tests, talking to 1
+
+Since all the microservices are developped by one single team we decide to deploy them all into the same namespace.
+
+### Create Deployment and Service Configurations
+```sh
+mkdir online-shop-microservices
+cd online-shop-microservices
+touch config.yaml
+```
+
+We start with specifying the Deployment and Service for the email microservice. Add the following content to the `config.yaml` file:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emailservice
+spec:
+  selector:
+    matchLabels:
+      app: emailservice
+  template:
+    metadata:
+      labels:
+        app: emailservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/emailservice
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emailservice
+spec:
+  type: ClusterIP
+  selector:
+    app: emailservice
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: 8080
+```
+
+Since the example microservices application is a fork of a demo application provided by Google, the images are available in a [public Google image registry](https://console.cloud.google.com/gcr/images/google-samples/global/microservices-demo). For a real application developped by you, you would probably deploy your images in a private Docker registry of your company.
+
+Each microservice container needs an environment variable called `PORT` specifying the port the container is listening on.
+
+We continue with the recommendation microservice. Append the following content to the `config.yaml` file:
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendationservice
+spec:
+  selector:
+    matchLabels:
+      app: recommendationservice
+  template:
+    metadata:
+      labels:
+        app: recommendationservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/recommendationservice
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: PRODUCT_CATALOG_SERVICE_ADDR
+          value: "productcatalogservice:3550"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendationservice
+spec:
+  type: ClusterIP
+  selector:
+    app: recommendationservice
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+```
+
+Since the recommendation microservice is talking to the product-catalog microservice under which hostname and port this service can be accessed. Since all the Services are running in the same namespace, their hostname is just the service name. We are going to name the Service for the product-catalog microservice `productcatalogservice`. It will be listening on port 3550 (attribute `port`). The address of the product-catalog microservice's Service is stored in the environment variable `PRODUCT_CATALOG_SERVICE_ADDR`.
+
+The next microservices to be configured are the payment microservice, the product-catalog, the currency, the shipping and the ad microservices. There's nothing special with these microservices. Append the following content to the `config.yaml` file:
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymentservice
+spec:
+  selector:
+    matchLabels:
+      app: paymentservice
+  template:
+    metadata:
+      labels:
+        app: paymentservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/paymentservice
+        ports:
+        - containerPort: 50051
+        env:
+        - name: PORT
+          value: "50051"
+        - name: DISABLE_PROFILER
+          value: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: paymentservice
+spec:
+  type: ClusterIP
+  selector:
+    app: paymentservice
+  ports:
+  - protocol: TCP
+    port: 50051
+    targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productcatalogservice
+spec:
+  selector:
+    matchLabels:
+      app: productcatalogservice
+  template:
+    metadata:
+      labels:
+        app: productcatalogservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/productcatalogservice
+        ports:
+        - containerPort: 3550
+        env:
+        - name: PORT
+          value: "3550"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: productcatalogservice
+spec:
+  type: ClusterIP
+  selector:
+    app: productcatalogservice
+  ports:
+  - protocol: TCP
+    port: 3550
+    targetPort: 3550
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currencyservice
+spec:
+  selector:
+    matchLabels:
+      app: currencyservice
+  template:
+    metadata:
+      labels:
+        app: currencyservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/currencyservice
+        ports:
+        - containerPort: 7000
+        env:
+        - name: PORT
+          value: "7000"
+        - name: DISABLE_PROFILER
+          value: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: currencyservice
+spec:
+  type: ClusterIP
+  selector:
+    app: currencyservice
+  ports:
+  - protocol: TCP
+    port: 7000
+    targetPort: 7000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shippingservice
+spec:
+  selector:
+    matchLabels:
+      app: shippingservice
+  template:
+    metadata:
+      labels:
+        app: shippingservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/shippingservice
+        ports:
+        - containerPort: 50051
+        env:
+        - name: PORT
+          value: "50051"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shippingservice
+spec:
+  type: ClusterIP
+  selector:
+    app: shippingservice
+  ports:
+  - protocol: TCP
+    port: 50051
+    targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice
+spec:
+  selector:
+    matchLabels:
+      app: adservice
+  template:
+    metadata:
+      labels:
+        app: adservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/adservice
+        ports:
+        - containerPort: 9555
+        env:
+        - name: PORT
+          value: "9555"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice
+  ports:
+  - protocol: TCP
+    port: 9555
+    targetPort: 9555
+```
+
+The next microservice to be configured is the cart-service. It does not define a `PORT` environment variable but a `REDDIS_ADDR` instead. The Redis cart will be configured at the end. Append the following content to the `config.yaml` file:
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cartservice
+spec:
+  selector:
+    matchLabels:
+      app: cartservice
+  template:
+    metadata:
+      labels:
+        app: cartservice
+    spec:
+      containers:
+      - name: server
+        image: gcr.io/google-samples/microservices-demo/cartservice
+        ports:
+        - containerPort: 7070
+        env:
+        - name: REDIS_ADDR
+          value: "redis-cart:6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cartservice
+spec:
+  type: ClusterIP
+  selector:
+    app: cartservice
+  ports:
+  - protocol: TCP
+    port: 7070
+    targetPort: 7070
+```
+
+And now we configure the Checkout micorservice and the Frontend microservice. Both talk to a lot of other microservices and thus need a lot of environment variables defining the according Service addresses:
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkoutservice
+spec:
+  selector:
+    matchLabels:
+      app: checkoutservice
+  template:
+    metadata:
+      labels:
+        app: checkoutservice
+    spec:
+      containers:
+        - name: server
+          image: gcr.io/google-samples/microservices-demo/checkoutservice
+          ports:
+          - containerPort: 5050
+          env:
+          - name: PORT
+            value: "5050"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice:3550"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice:50051"
+          - name: PAYMENT_SERVICE_ADDR
+            value: "paymentservice:50051"
+          - name: EMAIL_SERVICE_ADDR
+            value: "emailservice:5000"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice:7070"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkoutservice
+spec:
+  type: ClusterIP
+  selector:
+    app: checkoutservice
+  ports:
+  - protocol: TCP
+    port: 5050
+    targetPort: 5050
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: server
+          image: gcr.io/google-samples/microservices-demo/frontend
+          ports:
+          - containerPort: 8080
+          env:
+          - name: PORT
+            value: "8080"
+          - name: PRODUCT_CATALOG_SERVICE_ADDR
+            value: "productcatalogservice:3550"
+          - name: CURRENCY_SERVICE_ADDR
+            value: "currencyservice:7000"
+          - name: CART_SERVICE_ADDR
+            value: "cartservice:7070"
+          - name: RECOMMENDATION_SERVICE_ADDR
+            value: "recommendationservice:8080"
+          - name: SHIPPING_SERVICE_ADDR
+            value: "shippingservice:50051"
+          - name: CHECKOUT_SERVICE_ADDR
+            value: "checkoutservice:5050"
+          - name: AD_SERVICE_ADDR
+            value: "adservice:9555"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    nodePort: 30007
+```
+
+The Service of the Frontend microservice is the entrypoint of the application and needs to be accessible from outside of the cluster. So we chose the type NodePort and specified an additional port (`nodePort`) which will be accessible from the outside.
+
+The last remaining Deployment and Service is the one for the Redis cache:
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cart
+spec:
+  selector:
+    matchLabels:
+      app: redis-cart
+  template:
+    metadata:
+      labels:
+        app: redis-cart
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+      volumes:
+      - name: redis-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cart
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cart
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+```
+
+Persistent volume types exist beyond the lifetime of a Pod. But there are also ephemeral volume types that are destroyed by K8s when the Pod using the volume does no longer exist. The volume type `emptyDir` is such an ephemeral volume type. It is created when a Pod referencing this volume is assigned to a node. It exists as long as the Pod is running on that node. When the Pod dies and is re-scheduled on another node, it starts with a new empty directory. (However when a container inside the Pod crashes, the data in the volume will not be lost.)
+
+### Deploy Microservices into Remote K8s Cluster
+We are going to deploy these microservices into a remote K8s cluster running on three Linode servers/nodes. So login to your Linode account, open the Kubernetes page and press the "Create Cluster" button. Enter the "Cluster Label" 'online-shop-microservices', select the region 'Frankfurt, DE (eu-central)' and the latest Kubernetes version (1.26). In the "Add Node Pools" section select the "Shared CPU" tab and add three 'Linode 2 GB' servers. Press the "Create Cluster" button. Download the 'online-shop-microservices-kubeconfig.yaml' file.
+
+On your local machine restrict the file permissions for this downloaded file and set the environment variable `KUBECONFIG` to the path of the file:
+```sh
+chmod 400 </absolute/path/to/online-shop-microservices-kubeconfig.yaml>
+export KUBECONFIG=</absolute/path/to/online-shop-microservices-kubeconfig.yaml>`
+
+# test the connection
+kubectl get nodes
+# =>
+# NAME                            STATUS   ROLES    AGE   VERSION
+# lke106346-158982-6452c20f5fbc   Ready    <none>   77s   v1.26.3
+# lke106346-158982-6452c20fbf34   Ready    <none>   46s   v1.26.3
+# lke106346-158982-6452c2101d2f   Ready    <none>   59s   v1.26.3
+```
+
+Now create a namespace called `microservices` and deploy all the microservices into this namespace by applying the config.yaml file:
+```sh
+kubectl create namespace microservices
+kubectl apply -f config.yaml -n microservices
+# =>
+# deployment.apps/emailservice created
+# service/emailservice created
+# deployment.apps/recommendationservice created
+# service/recommendationservice created
+# deployment.apps/paymentservice created
+# service/paymentservice created
+# deployment.apps/productcatalogservice created
+# service/productcatalogservice created
+# deployment.apps/currencyservice created
+# service/currencyservice created
+# deployment.apps/shippingservice created
+# service/shippingservice created
+# deployment.apps/adservice created
+# service/adservice created
+# deployment.apps/cartservice created
+# service/cartservice created
+# deployment.apps/checkoutservice created
+# service/checkoutservice created
+# deployment.apps/frontend created
+# service/frontend created
+# deployment.apps/redis-cart created
+# service/redis-cart created
+
+kubectl get pods -n microservices -w
+# =>
+# NAME                                     READY   STATUS    RESTARTS   AGE
+# adservice-6495d7f86-b8t5t                1/1     Running   0          18s
+# cartservice-7c99bd7945-vsdzk             1/1     Running   0          17s
+# checkoutservice-b4746cd88-rf5zr          1/1     Running   0          17s
+# currencyservice-69b8c58656-742zt         1/1     Running   0          19s
+# emailservice-67785f9598-znvgf            1/1     Running   0          20s
+# frontend-8f4b9777d-wvmtg                 1/1     Running   0          16s
+# paymentservice-6fbc8967d-4r98t           1/1     Running   0          19s
+# productcatalogservice-845969555d-h78kn   1/1     Running   0          19s
+# recommendationservice-54dcb96dfd-gmd2q   1/1     Running   0          20s
+# redis-cart-846556db8f-l7whs              1/1     Running   0          16s
+# shippingservice-5459f64756-87mwl         1/1     Running   0          18s
+
+kubectl get services -n microservices
+# =>
+# NAME                    TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+# adservice               ClusterIP   10.128.76.151    <none>        9555/TCP       94s
+# cartservice             ClusterIP   10.128.64.220    <none>        7070/TCP       93s
+# checkoutservice         ClusterIP   10.128.108.84    <none>        5050/TCP       93s
+# currencyservice         ClusterIP   10.128.222.36    <none>        7000/TCP       95s
+# emailservice            ClusterIP   10.128.28.254    <none>        5000/TCP       96s
+# frontend                NodePort    10.128.55.162    <none>        80:30007/TCP   92s
+# kubernetes              ClusterIP   10.128.0.1       <none>        443/TCP        142m
+# paymentservice          ClusterIP   10.128.192.77    <none>        50051/TCP      95s
+# productcatalogservice   ClusterIP   10.128.248.40    <none>        3550/TCP       95s
+# recommendationservice   ClusterIP   10.128.244.173   <none>        8080/TCP       96s
+# redis-cart              ClusterIP   10.128.55.57     <none>        6379/TCP       92s
+# shippingservice         ClusterIP   10.128.97.81     <none>        50051/TCP      94s
+```
+
+Services of type NodePort don't get an external IP address. We would have to use a Service of type LoadBalancer for this. But NodePort services are accessible via the IP address of any node of the K8s cluster and the nodePort port of the Service. So login to your Linode management web-console and get the IP address of one of the three nodes. Then open a new browser tab and navigate to `http://<linode-node-ip>:30007` to see the microservices application "boutique" in action.
+
+</details>
+
+*****
