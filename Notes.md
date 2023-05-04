@@ -2071,17 +2071,17 @@ We are going to deploy the microservices application in the GitHub repository [n
 - which service(s) must be accessible from outside of the cluster
 
 Developers tell us that the application is made up of the following microservices:
-- 1. Frontend: entrypoint, accessible from outside; port 8080; talking to 2, 3, 4, 7, 9, 10
-- 2. AdService: port 9555
-- 3. CheckoutService: port 5050; talking to 4, 5, 6, 7, 8, 10
-- 4. CurrencyService: port 7000
-- 5. EmailService: port 8080
-- 6. PaymentService: port 50051
-- 7. ShippingService: port 50051
-- 8. ProductCatalogService: port 3550
-- 9. RecommendationService: port 8080; talking to 8
-- 10. CartService: port 7070; storing data in Redis In-Memory cache
-- 11. LoadGenerator: not needed in production, just needed for doing load tests, talking to 1
+1. Frontend: entrypoint, accessible from outside; port 8080; talking to 2, 3, 4, 7, 9, 10
+2. AdService: port 9555
+3. CheckoutService: port 5050; talking to 4, 5, 6, 7, 8, 10
+4. CurrencyService: port 7000
+5. EmailService: port 8080
+6. PaymentService: port 50051
+7. ShippingService: port 50051
+8. ProductCatalogService: port 3550
+9. RecommendationService: port 8080; talking to 8
+10. CartService: port 7070; storing data in Redis In-Memory cache
+11. LoadGenerator: not needed in production, just needed for doing load tests, talking to 1
 
 Since all the microservices are developped by one single team we decide to deploy them all into the same namespace.
 
@@ -2624,6 +2624,158 @@ kubectl get services -n microservices
 ```
 
 Services of type NodePort don't get an external IP address. We would have to use a Service of type LoadBalancer for this. But NodePort services are accessible via the IP address of any node of the K8s cluster and the nodePort port of the Service. So login to your Linode management web-console and get the IP address of one of the three nodes. Then open a new browser tab and navigate to `http://<linode-node-ip>:30007` to see the microservices application "boutique" in action.
+
+</details>
+
+*****
+
+<details>
+<summary>Video: 23 - Production & Security Best Practices</summary>
+<br />
+
+The configuration file created in the last video can and should be improved with several K8s best practices (#1 - #6).
+
+### #1: Specify a pinned version on each container image
+Why? Otherwise, the latest version is fetched, which makes it unpredictable and intransparent as to which versions are deployed in the cluster.
+
+All the microservices of the sample application have the same image version. The current version is v0.6.0, so we add this version to each image name, e.g. `gcr.io/google-samples/microservices-demo/frontend` becomes `gcr.io/google-samples/microservices-demo/frontend:v0.6.0`.
+
+### #2: Configure a liveness probe on each container
+Why? K8s knows the pod state, not the application state. Sometimes the pod is running, but the container inside crashed. With a liveness probe we can let K8s know when it needs to restart the container.
+
+All the microservices of the sample application already provide a command that can be executed to check the liveness of the microservice. So we just have to tell K8s to call this command for the liveness probe of the container.
+
+Add the following snipped to each container configuration (replace the port number to match the port of each container) except for the 'redis' container:
+```yaml
+livenessProbe:
+  periodSeconds: 5
+  exec:
+    command: ["/bin/grpc_health_probe", "-addr=:8080"]
+```
+
+There are two other ways of specifying a liveness probe like providing a REST endpoint:
+```yaml
+livenessProbe:
+  periodSeconds: 5
+  httpGet:
+    path: /health
+    port: 8080
+```
+
+Or simply trying to establish a TCP connection, which can be used for the 'redis' container:
+```yaml
+livenessProbe:
+  periodSeconds: 5
+  tcpSocket:
+    port: 6379
+```
+
+Besides the `periodSeconds` attribute specifying the interval between probes, there is also an `initialDelaySeconds` attribute specifying the initial delay before the first probe is triggered. This may be useful if you know the application will always take some time to start up.
+
+### #3: Configure a readiness probe on each container
+Why? Let K8s know if the application is ready to receive traffic. As long as the container is not yet ready, K8s won't trigger any liveness probes on it.
+
+For the microservices of the demo application we use the exact same command used for the liveness probe to add a readiness probe to each container:
+```yaml
+readinessProbe:
+  periodSeconds: 5
+  exec:
+    command: ["/bin/grpc_health_probe", "-addr=:8080"]
+```
+
+The rediness porbe for the 'redis' container looks like this:
+```yaml
+readinessProbe:
+  periodSeconds: 5
+  tcpSocket:
+    port: 6379
+```
+
+### #4: Configure resource limits & requests for each container
+Why? To make sure 1 buggy container doesn't eat up all resources, breaking the cluster.
+
+There are two types of resources: CPU and Memory. "requests" is what the container is guaranteed to get. The K8s scheduler has to consider the specified requests to figure out on which node to run new Pods. CPU resources are defined in millicores, Memory resources are defined in Mebibytes (1 Mebibyte = 1024 * 1024 Bytes).
+
+To specify reasonable values for containers without any special requirements, add the following snipped to the container specification:
+```yaml
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+```
+
+Note that if you specify values bigger than your biggest node, then your Pod will never be scheduled.
+
+To prevent a container from consuming all the available CPU and/or Memory, you should also specify a limit for the container above which it is not allowed to consume the resources. If a container requests more resources than its limits allow it to consume, K8s will stop the Pod of the container and re-schedule it. Limits are defined at the same level as requests:
+```yaml
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+```
+
+Set these values on every container except for the following:
+- the recommendationservice container needs memory of 220Mi/450Mi
+- the cartservice container needs CPU of 200m/300m
+- the redis container needs CPU of 70m/125m and memory of 200Mi/256Mi
+- the adservice container needs CPU of 200m/300m and memory of 180Mi/300Mi
+
+### #5: Don't use NodePort in production
+Why? NodePort opens the port on every Worker Node thus exposing them directly and creating multiple points of entry to secure. Better alternatives are LoadBalancer or Ingresss (only one entrypoint to the application), ideally running on a separate Node outside the cluster.
+
+So replace the `NodePort` service type of the frontend service with `LoadBalancer` and remove the `nodePort` attribute.
+
+### #6: Always deploy more than 1 replica for for each application
+Why? To make sure your application is always available, no downtime for users!
+
+If you do not specify the number of replicas, the default value of 1 is applied. Add `replicas: 2` to the specification of each deployment:
+```yaml
+spec:
+  replicas: 2
+```
+
+****
+
+The following best practices (#7 - #9) are not related to the configuration files but to Kubernetes in general.
+
+### #7: Always have more than 1 Worker Node
+Why? Avoid single point of failure with just 1 Node. The replicas of a Pod should ideally run on different Nodes. This allows you to reboot a server (e.g. after a software update or other maintenance tasks) without downtime of the application.
+
+### #8: Label all your K8s resources
+Why? Have an identifier for your components, for example to group pods and reference in services. Lables are just key-value pairs and may be technical labels or business labels. 
+
+
+### #9: Use namespaces to group your resources
+Why? For example to organize resources and to define access rights based on namespaces.
+
+****
+
+And finally there are three security related best practices.
+
+### #10: Ensure Images are free of vulnerabilities
+Why? Third-party libraries or base images can have known vulnerabilities. You can do manual vulnerability scans or automated scans in CI/CD pipeline.
+
+
+### #11: No root access for containers
+Why? With root access containers have access to host-level resources. Much more damage possible, if container gets hacked!
+
+So don't do this:
+```yaml
+spec:
+  containers:
+  - name: app
+    image: ...
+    securityContext:
+      privileged: true
+```
+
+If you are using 3rd party images, check whether their containers are running with root privileges.
+
+### #12: Keep K8s version up to date
+Why & How? Latest versions include patches to previous security issues etc. Upgrade with zero downtime by having multiple nodes and pod replicas on different nodes and then updating them one node after the other.
 
 </details>
 
