@@ -2175,7 +2175,7 @@ spec:
     targetPort: 8080
 ```
 
-Since the recommendation microservice is talking to the product-catalog microservice under which hostname and port this service can be accessed. Since all the Services are running in the same namespace, their hostname is just the service name. We are going to name the Service for the product-catalog microservice `productcatalogservice`. It will be listening on port 3550 (attribute `port`). The address of the product-catalog microservice's Service is stored in the environment variable `PRODUCT_CATALOG_SERVICE_ADDR`.
+Since the recommendation microservice is talking to the product-catalog microservice we have to tell it under which hostname and port this service can be accessed. Since all the Services are running in the same namespace, their hostname is just the service name. We are going to name the Service for the product-catalog microservice `productcatalogservice`. It will be listening on port 3550 (attribute `port`). The address of the product-catalog microservice's Service is stored in the environment variable `PRODUCT_CATALOG_SERVICE_ADDR`.
 
 The next microservices to be configured are the payment microservice, the product-catalog, the currency, the shipping and the ad microservices. There's nothing special with these microservices. Append the following content to the `config.yaml` file:
 ```yaml
@@ -2645,7 +2645,7 @@ Why? K8s knows the pod state, not the application state. Sometimes the pod is ru
 
 All the microservices of the sample application already provide a command that can be executed to check the liveness of the microservice. So we just have to tell K8s to call this command for the liveness probe of the container.
 
-Add the following snipped to each container configuration (replace the port number to match the port of each container) except for the 'redis' container:
+Add the following snipped to each container configuration (replace the port number to match the port of each container) except for the 'redis' and 'frontend' container:
 ```yaml
 livenessProbe:
   periodSeconds: 5
@@ -2653,7 +2653,7 @@ livenessProbe:
     command: ["/bin/grpc_health_probe", "-addr=:8080"]
 ```
 
-There are two other ways of specifying a liveness probe like providing a REST endpoint:
+There are two other ways of specifying a liveness probe. The first one is providing a REST endpoint (used by the 'frontend' container):
 ```yaml
 livenessProbe:
   periodSeconds: 5
@@ -2662,7 +2662,7 @@ livenessProbe:
     port: 8080
 ```
 
-Or simply trying to establish a TCP connection, which can be used for the 'redis' container:
+The second one is simply trying to establish a TCP connection (used by the 'redis' container):
 ```yaml
 livenessProbe:
   periodSeconds: 5
@@ -2675,7 +2675,7 @@ Besides the `periodSeconds` attribute specifying the interval between probes, th
 ### #3: Configure a readiness probe on each container
 Why? Let K8s know if the application is ready to receive traffic. As long as the container is not yet ready, K8s won't trigger any liveness probes on it.
 
-For the microservices of the demo application we use the exact same command used for the liveness probe to add a readiness probe to each container:
+For the microservices of the demo application we use the exact same command used for the liveness probe to add a readiness probe to each container (except for the 'frontend' and 'redis' container):
 ```yaml
 readinessProbe:
   periodSeconds: 5
@@ -2683,7 +2683,19 @@ readinessProbe:
     command: ["/bin/grpc_health_probe", "-addr=:8080"]
 ```
 
-The rediness porbe for the 'redis' container looks like this:
+The readiness probe for the 'frontend' container looks like this:
+```yaml
+readinessProbe:
+  initialDelaySeconds: 10
+  httpGet:
+    path: "/_healthz"
+    port: 8080
+    httpHeaders:
+    - name: "Cookie"
+      value: "shop_session-id=x-readiness-probe"
+```
+
+The readiness probe for the 'redis' container looks like this:
 ```yaml
 readinessProbe:
   periodSeconds: 5
