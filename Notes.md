@@ -2792,3 +2792,246 @@ Why & How? Latest versions include patches to previous security issues etc. Upgr
 </details>
 
 *****
+
+<details>
+<summary>Video: 24 - Demo project: Create Helm Chart for Microservices</summary>
+<br />
+
+We deployed 10 different microservices, but their Deployment and Service configurations are very similar. An ideal case for the templating feature of Helm which allows to define a blueprint for all the Deployments and Services and only set the specific values for the individual microservices.
+
+Let's create a Helm Chart for the deployment of the microservices.
+
+```sh
+# create the basic file/directory structure
+helm create microservice
+```
+
+Remove everything inside the `microservice/templates/` folder except the files `deployment.yaml` and `service.yaml`. Delete the content of these two remaining files because we're going to writer our templates from scratch. Also delete the content of the `microservice/values.yaml` file.
+
+### Create Basic Template File
+In a Helm Chart template file placeholder variables can be defined like this:
+```yaml
+{{ .Values.varName }}
+```
+
+'Values' is a built-in object which contains the values passed into the template from 3 sources:
+- the values.yaml file in the chart
+- a user-supplied file passed to the helm command with the -f option
+- parameters passed to the helm command with the --set option
+
+There are other built-in objects like 'Release', 'Files' etc. For more information read the [documentation](https://helm.sh/docs/chart_template_guide/builtin_objects/).
+
+The values may be defined in a flat or nested way:
+```yaml
+appName: my-app # referenced as {{ .Values.appName }}
+appReplicas: 1  # referenced as {{ .Values.appReplicas }}
+
+app:
+  name: my-app # referenced as {{ .Values.app.name }}
+  replicas: 1  # # referenced as {{ .Values.app.replicas }}
+```
+
+Helm best practives recommend to use the flat structure. It is easier for Chart users to set/override the values using the --set option.
+
+### Dynamic Environment Variables
+The amount of environment variables is not the same for all containers. So we have to define a list of variable names and values in the values.yaml file. And in the template we must be able to iterate over this list.
+
+For this purpose (iterating over a list of values) there is a built-in function called `range` available. And because the values of environment variables are always strings (even if its a port number), we have to quote the values. This can be done using another built-in function called `quote`. This function can also be pipelined to the value to be quoted, `{{ quote .value }}` and `{{ .value | quote }}` are equivalent.
+
+The `env` section in the template finally looks like this:
+```yaml
+env:
+{{- range .Values.containerEnvVars}}
+- name: {{ .name }}
+  value: {{ .value | quote }}
+{{- end}}
+```
+
+The final `deployment.yaml` template will look like this:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  replicas: {{ .Values.appReplicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: {{ .Values.appImage }}:{{ .Values.appVersion }}
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        env:
+        {{- range .Values.containerEnvVars}}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end}}
+```
+
+And the `service.yaml` file will look like this:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  type: {{ .Values.serviceType }}
+  selector:
+    app: {{ .Values.appName }}
+  ports:
+  - protocol: TCP
+    port: {{ .Values.servicePort }}
+    targetPort: {{ .Values.containerPort }}
+```
+
+### Set the Values
+In the `values.yaml` file we can provide default values for the template variables. In our case this could look like this:
+```yaml
+appName: servicename
+appImage: gcr.io/google-samples/microservices-demo/servicename
+appVersion: v.0.0.0
+appReplicas: 1
+containerPort: 8080
+containerEnvVars:
+- name: ENV_VAR_ONE
+  value: "valueone"
+- name: ENV_VAR_TWO
+  value: "valuetwo"  
+
+serviceType: ClusterIP
+servicePort: 8080
+```
+We are going to override these values for each individual microservice. Let's do it for the first microservice, the emailservice. Create a file called `email-service-values.yaml` outside of the `microservice` folder and add the following content:
+```yaml
+appName: emailservice
+appImage: gcr.io/google-samples/microservices-demo/emailservice
+appVersion: v.0.6.0
+appReplicas: 2
+containerPort: 8080
+containerEnvVars:
+- name: PORT
+  value: "8080"
+
+servicePort: 5000
+```
+
+Let's check whether the first microservice configuration files will be generated correctly. Go outside of the `microservice` directory and execute the following command:
+```sh
+helm template -f email-service-values.yaml microservice
+```
+
+This command won't create any files. It just prints out what would be sent to Kubernetes when `helm install` would be executed.
+
+There is also a `helm lint` command that examines a chart for possible issues. Issues reported as ERROR will cause the chart to fail on installation. Issues reported as WARNING just break the conventions or recommendations.
+```sh
+helm lint -f email-service-values.yaml microservice
+# ==> Linting microservice
+# [INFO] Chart.yaml: icon is recommended
+
+# 1 chart(s) linted, 0 chart(s) failed
+```
+
+### Deploy Email Service
+To deploy the configured emailservice into the Kubernetes cluster execute the following command:
+```sh
+helm install -f email-service-values.yaml emailservice microservice
+#    ------- ---------------------------- ------------ ------------
+#    install        override values          release       chart
+#    a chart          from a file             name         name
+
+helm ls
+# =>
+# NAME        	NAMESPACE	REVISION	UPDATED                              	STATUS  	CHART             	APP VERSION
+# emailservice	default  	1       	2023-05-05 23:25:05.133891 +0200 CEST	deployed	microservice-0.1.0	1.16.0
+```
+
+The chart version and app version values are taken from the `Chart.yaml` file which we didn't adjust yet.
+
+### Create Values File for all Microservices
+To deploy all the microservices using the same Helm Chart we first have to create a service-specific values.yaml file for each microservice (except for the 'redis' microservice). We put all these service-specific values files into a folder called `values` (just for keeping the workspace clean).
+
+### Create Redis Helm Chart
+Because the redis microservice uses a 3rd party image and thus probably has a lifecycle different from the one of the other microservices, we want to keep it separated from our own microservices. So let's create a Helm Chart for the redis microservice only.
+
+We create a `charts` directory, move the microservice chart into it and create a new `redis` chart:
+```sh
+mkdir charts
+mv microservice charts
+cd charts
+helm create redis
+```
+
+Cleanup all the auto-generated files within the redis chart folder (as we did before for the microservice chart), and add the following content to the deployment.yaml file:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  replicas: {{ .Values.appReplicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: {{ .Values.appImage }}:{{ .Values.appVersion }}
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        volumeMounts:
+        - name: {{ .Values.volumeName }}
+          mountPath: {{ .Values.containerMountPath }}
+      volumes: 
+      - name: {{ .Values.volumeName }}
+        emptyDir: {}
+```
+
+Then add the follwing content to the service.yaml file:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Values.appName }}
+  ports:
+  - protocol: TCP
+    port: {{ .Values.servicePort }}
+    targetPort: {{ .Values.containerPort }}
+```
+
+Add the following default values to the values.yaml file:
+```yaml
+appName: redis
+appImage: redis
+appVersion: alpine
+appReplicas: 1
+containerPort: 6379
+volumeName: redis-data
+containerMountPath: /data
+
+servicePort: 6379
+```
+
+And finally add a `redis-values.yaml` file with the following content to the `values` folder:
+```yaml
+appName: redis-cart
+appReplicas: 2
+```
+
+</details>
+
+*****
