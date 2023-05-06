@@ -2828,23 +2828,23 @@ appReplicas: 1  # referenced as {{ .Values.appReplicas }}
 
 app:
   name: my-app # referenced as {{ .Values.app.name }}
-  replicas: 1  # # referenced as {{ .Values.app.replicas }}
+  replicas: 1  # referenced as {{ .Values.app.replicas }}
 ```
 
-Helm best practives recommend to use the flat structure. It is easier for Chart users to set/override the values using the --set option.
+Helm best practices recommend to use the flat structure. It is easier for Chart users to set/override the values using the --set option.
 
 ### Dynamic Environment Variables
 The amount of environment variables is not the same for all containers. So we have to define a list of variable names and values in the values.yaml file. And in the template we must be able to iterate over this list.
 
-For this purpose (iterating over a list of values) there is a built-in function called `range` available. And because the values of environment variables are always strings (even if its a port number), we have to quote the values. This can be done using another built-in function called `quote`. This function can also be pipelined to the value to be quoted, `{{ quote .value }}` and `{{ .value | quote }}` are equivalent.
+For this purpose (iterating over a list of values) there is a built-in function called `range` available. And because the values of environment variables are always strings (even if it's a port number), we have to quote the values. This can be done using another built-in function called `quote`. This function can also be pipelined to the value to be quoted, so `{{ quote .value }}` and `{{ .value | quote }}` are equivalent.
 
 The `env` section in the template finally looks like this:
 ```yaml
 env:
-{{- range .Values.containerEnvVars}}
+{{- range .Values.containerEnvVars }}
 - name: {{ .name }}
   value: {{ .value | quote }}
-{{- end}}
+{{- end }}
 ```
 
 The final `deployment.yaml` template will look like this:
@@ -2912,7 +2912,7 @@ We are going to override these values for each individual microservice. Let's do
 ```yaml
 appName: emailservice
 appImage: gcr.io/google-samples/microservices-demo/emailservice
-appVersion: v.0.6.0
+appVersion: v0.6.0
 appReplicas: 2
 containerPort: 8080
 containerEnvVars:
