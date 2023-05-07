@@ -16,6 +16,4 @@ And finally it contains the following demo projects:
 - [Prometheus Monitoring in K8s Cluster](./demo-projects/5-prometheus-in-k8s-cluster/)
 - [Deploy Microservices Application to Remote K8s Cluster](./demo-projects/6-deploy-microservices-app-to-remote-k8s-cluster/)
 - [Create Helm Chart for Microservices](./demo-projects/7-helm-chart-for-microservices/)
-
-
-
+- [Deploy Microservices with Helmfile](./demo-projects/8-deploy-microservices-with-helmfile/)
