@@ -3073,7 +3073,7 @@ chmod u+x install.sh
 ./install.sh
 ```
 
-To uninstall the services we have execute a `helm uninstall` command for each service. Compared to `kubectl apply` or `kubectl delete` which allow to deploy or delete all the services with one command, this is not really elegant.
+To uninstall the services we have to execute a `helm uninstall` command for each service. Compared to `kubectl apply` or `kubectl delete` which allow to deploy or delete all the services with one command, this is not really elegant.
 
 But there is another way of doing these tasks, which is using a Helmfile.
 
@@ -3148,15 +3148,17 @@ To synchronize the K8s cluster with the desired state declared in the helmfile.y
 helmfile sync
 ```
 
-To get a list of all currently installed releases, execute
+To get the status of all the releases declared in the helmfile.yaml, execute
 ```sh
-helmfile list
+helmfile status
 ```
 
 To uninstall all the releases declared in the helmfile.yaml with on command, execute
 ```sh
 helmfile destroy
 ```
+
+Also see the [helmfile cli reference](https://helmfile.readthedocs.io/en/latest/#cli-reference).
 
 ### Wrap up
 The Helm Charts can and should be pushed to the Git repository like rest of your application code. You can either add it to the same repository, as a part of the application project, or you can host the Helm Charts in a separate Git repository for Helm Charts only.
