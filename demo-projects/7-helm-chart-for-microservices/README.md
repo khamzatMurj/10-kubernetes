@@ -240,7 +240,7 @@ containerEnvVars:
 - name: PORT
   value: "7070"
 - name: REDIS_ADDR
-  value: "redis-cart:6379"  
+  value: "rediscart:6379"  
 readinessProbeArg: "-addr=:7070"
 livenessProbeArg: "-addr=:7070"
 cpuRequests: 200m

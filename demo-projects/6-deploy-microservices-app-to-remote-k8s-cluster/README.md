@@ -468,7 +468,7 @@ spec:
         - containerPort: 7070
         env:
         - name: REDIS_ADDR
-          value: "redis-cart:6379"
+          value: "rediscart:6379"
         readinessProbe:
           periodSeconds: 5
           exec:
@@ -658,16 +658,16 @@ Because this service stores the data of the online shop, we want to have only on
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis-cart
+  name: rediscart
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis-cart
+      app: rediscart
   template:
     metadata:
       labels:
-        app: redis-cart
+        app: rediscart
     spec:
       containers:
       - name: redis
@@ -699,11 +699,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-cart
+  name: rediscart
 spec:
   type: ClusterIP
   selector:
-    app: redis-cart
+    app: rediscart
   ports:
   - name: redis
     port: 6379
