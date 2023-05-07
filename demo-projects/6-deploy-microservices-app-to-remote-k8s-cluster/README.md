@@ -388,7 +388,7 @@ spec:
 ```
 
 **Step 8:** Specify the Deployment and Service for the ad microservice\
-The ad-service needs more CPU and memory. Append the following content to the `config.yaml` file:
+The ad-service needs an initial probe delay and more CPU and memory. Append the following content to the `config.yaml` file:
 ```yaml
 ---
 apiVersion: apps/v1
@@ -414,11 +414,13 @@ spec:
         - name: PORT
           value: "9555"
         readinessProbe:
-          periodSeconds: 5
+          initialDelaySeconds: 20
+          periodSeconds: 15
           exec:
             command: ["/bin/grpc_health_probe", "-addr=:9555"]
         livenessProbe:
-          periodSeconds: 5
+          initialDelaySeconds: 20
+          periodSeconds: 15
           exec:
             command: ["/bin/grpc_health_probe", "-addr=:9555"]
         resources:

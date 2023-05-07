@@ -222,7 +222,11 @@ containerPort: 9555
 containerEnvVars:
 - name: PORT
   value: "9555"
+readinessProbeInitialDelaySeconds: 20
+readinessProbePeriodSeconds: 15
 readinessProbeArg: "-addr=:9555"
+livenessProbeInitialDelaySeconds: 20
+livenessProbePeriodSeconds: 15
 livenessProbeArg: "-addr=:9555"
 cpuRequests: 200m
 memoryRequests: 180Mi

@@ -333,11 +333,13 @@ spec:
         - name: PORT
           value: "9555"
         readinessProbe:
-          periodSeconds: 5
+          initialDelaySeconds: 20
+          periodSeconds: 15
           exec:
             command: ["/bin/grpc_health_probe", "-addr=:9555"]
         livenessProbe:
-          periodSeconds: 5
+          initialDelaySeconds: 20
+          periodSeconds: 15
           exec:
             command: ["/bin/grpc_health_probe", "-addr=:9555"]
         resources:
