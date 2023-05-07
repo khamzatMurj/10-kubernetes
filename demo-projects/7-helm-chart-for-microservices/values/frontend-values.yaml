@@ -1,7 +1,4 @@
-appName: frontend
-appImage: gcr.io/google-samples/microservices-demo/frontend
-appVersion: v0.6.0
-appReplicas: 2
+image: gcr.io/google-samples/microservices-demo/frontend
 containerPort: 8080
 containerEnvVars:
 - name: PORT
@@ -19,7 +16,15 @@ containerEnvVars:
 - name: CHECKOUT_SERVICE_ADDR
   value: "checkoutservice:5050"
 - name: AD_SERVICE_ADDR
-  value: "adservice:9555"    
+  value: "adservice:9555"   
+readinessProbeInitialDelaySeconds: 10
+readinessProbePeriodSeconds: 10
+readinessProbeType: "httpGet"
+readinessProbeHttpGetPort: 8080
+livenessProbeInitialDelaySeconds: 10
+livenessProbePeriodSeconds: 10
+livenessProbeType: "httpGet"
+livenessProbeHttpGetPort: 8080
 
 serviceType: LoadBalancer
 servicePort: 80

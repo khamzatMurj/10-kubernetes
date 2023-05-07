@@ -62,7 +62,7 @@ spec:
           {{- if eq .Values.readinessProbeType "exec" }}
           exec:
             command: [{{ .Values.readinessProbeCommand | quote }}, {{ .Values.readinessProbeArg | quote }}]
-          {{- else if eq .Values.probeType "httpGet" }}
+          {{- else if eq .Values.readinessProbeType "httpGet" }}
           httpGet:
             path: {{ .Values.readinessProbeHttpGetPath | quote }}
             port: {{ .Values.readinessProbeHttpGetPort }}
@@ -71,7 +71,7 @@ spec:
             - name: {{ .name | quote }}
               value: {{ .value | quote }}
             {{- end }}
-          {{- else if eq .Values.probeType "tcpSocket" }}
+          {{- else if eq .Values.readinessProbeType "tcpSocket" }}
           tcpSocket:
             port: {{ .Values.readinessProbeTcpSocketPort }}
           {{- else }}
@@ -84,7 +84,7 @@ spec:
           {{- if eq .Values.livenessProbeType "exec" }}
           exec:
             command: [{{ .Values.livenessProbeCommand | quote }}, {{ .Values.livenessProbeArg | quote }}]
-          {{- else if eq .Values.probeType "httpGet" }}
+          {{- else if eq .Values.livenessProbeType "httpGet" }}
           httpGet:
             path: {{ .Values.livenessProbeHttpGetPath | quote }}
             port: {{ .Values.livenessProbeHttpGetPort }}
@@ -93,7 +93,7 @@ spec:
             - name: {{ .name | quote }}
               value: {{ .value | quote }}
             {{- end }}
-          {{- else if eq .Values.probeType "tcpSocket" }}
+          {{- else if eq .Values.livenessProbeType "tcpSocket" }}
           tcpSocket:
             port: {{ .Values.livenessProbeTcpSocketPort }}
           {{- else }}
@@ -397,6 +397,7 @@ spec:
   selector:
     matchLabels:
       app: {{ .Release.Name }}
+  template:
     metadata:
       labels:
         app: {{ .Release.Name }}

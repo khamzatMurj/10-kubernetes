@@ -1,4 +1,4 @@
-image: gcr.io/google-samples/microservices-demo/_recommendationservice
+image: gcr.io/google-samples/microservices-demo/recommendationservice
 containerPort: 8080
 containerEnvVars:
 - name: PORT
