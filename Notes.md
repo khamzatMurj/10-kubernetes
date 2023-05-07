@@ -3035,3 +3035,134 @@ appReplicas: 2
 </details>
 
 *****
+
+<details>
+<summary>Video: 25 - Demo project: Deploy Microservices with Helmfile</summary>
+<br />
+
+### Deploy the Microservices with 'helm install'
+To install the microservices, you can either manually execute a `helm install` command for each service like
+```sh
+helm install -f values/redis-values.yaml rediscart charts/redis
+helm install -f values/email-service-values.yaml emailservice charts/microservice
+helm install -f values/cart-service-values.yaml cartservice charts/microservice
+...
+```
+
+or you can create a shell script `install.sh` containing all these commands:
+
+_install.sh_
+```sh
+helm install -f values/redis-values.yaml rediscart charts/redis
+
+helm install -f values/email-service-values.yaml emailservice charts/microservice
+helm install -f values/cart-service-values.yaml cartservice charts/microservice
+helm install -f values/currency-service-values.yaml currencyservice charts/microservice
+helm install -f values/payment-service-values.yaml paymentservice charts/microservice
+helm install -f values/recommendation-service-values.yaml recommendationservice charts/microservice
+helm install -f values/productcatalog-service-values.yaml productcatalogservice charts/microservice
+helm install -f values/shipping-service-values.yaml shippingservice charts/microservice
+helm install -f values/ad-service-values.yaml adservice charts/microservice
+helm install -f values/checkout-service-values.yaml checkoutservice charts/microservice
+helm install -f values/frontend-values.yaml frontendservice charts/microservice
+```
+
+and execute it:
+```sh
+chmod u+x install.sh
+./install.sh
+```
+
+To uninstall the services we have execute a `helm uninstall` command for each service. Compared to `kubectl apply` or `kubectl delete` which allow to deploy or delete all the services with one command, this is not really elegant.
+
+But there is another way of doing these tasks, which is using a Helmfile.
+
+### Deploy the Microservices with a Helmfile
+A Helmfile provides a declarative way of deploying Helm Charts. It lets you declare a definition of an entire K8s cluster. You can define multiple releases in it and change the specification depending on the environment, for example.
+
+_helmfile.yaml_
+```yaml
+releases:
+  - name: rediscart
+    chart: charts/redis
+    values: 
+      - values/redis-values.yaml
+      - appReplicas: "1"
+      - volumeName: "redis-cart-data"
+  
+  - name: emailservice
+    chart: charts/microservice
+    values:
+      - values/email-service-values.yaml
+
+  - name: cartservice
+    chart: charts/microservice
+    values:
+      - values/cart-service-values.yaml    
+
+  - name: currencyservice
+    chart: charts/microservice
+    values:
+      - values/currency-service-values.yaml   
+
+  - name: paymentservice
+    chart: charts/microservice
+    values:
+      - values/payment-service-values.yaml
+
+  - name: recommendationservice
+    chart: charts/microservice
+    values:
+      - values/recommendation-service-values.yaml
+
+  - name: productcatalogservice
+    chart: charts/microservice
+    values:
+      - values/productcatalog-service-values.yaml
+
+  - name: shippingservice
+    chart: charts/microservice
+    values:
+      - values/shipping-service-values.yaml
+
+  - name: adservice
+    chart: charts/microservice
+    values:
+      - values/ad-service-values.yaml
+
+  - name: checkoutservice
+    chart: charts/microservice
+    values:
+      - values/checkout-service-values.yaml
+
+  - name: frontendservice
+    chart: charts/microservice
+    values:
+      - values/frontend-values.yaml
+```
+
+To deploy Helm Charts using a helmfile, you need to install the command line tool `helmfile`. On a Mac this can be done via `brew install helmfile`. (See the [Documentation](https://github.com/helmfile/helmfile) for other ways of installing it.)
+
+To synchronize the K8s cluster with the desired state declared in the helmfile.yaml, execute 
+```sh
+helmfile sync
+```
+
+To get a list of all currently installed releases, execute
+```sh
+helmfile list
+```
+
+To uninstall all the releases declared in the helmfile.yaml with on command, execute
+```sh
+helmfile destroy
+```
+
+### Wrap up
+The Helm Charts can and should be pushed to the Git repository like rest of your application code. You can either add it to the same repository, as a part of the application project, or you can host the Helm Charts in a separate Git repository for Helm Charts only.
+
+Your CI/CD pipeline can be updated to checkout the Helm Charts and install them in the K8s cluster using the `helmfile` command.
+
+</details>
+
+*****
