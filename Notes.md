@@ -132,7 +132,7 @@ brew install minikube
 minikube start --driver=docker
 minikube status
 
-# using hyperkit
+# using hyperkit (only possible on x86_64 architecture)
 brew update
 brew install hyperkit
 brew install minikube
