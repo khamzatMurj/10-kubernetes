@@ -165,6 +165,148 @@ With docker-compose, you were setting env_vars on server. In K8s there are own c
 
 **Steps to solve the tasks:**
 
+**Step 1:** Push docker image of java mysql app to private registry if necessary\
+Make sure the image of the [bootcamp-java-mysql](https://github.com/fsiegrist/devops-bootcamp-07-docker/tree/main/bootcamp-java-mysql) app from the exercises of module 7 is available in the private repository on DockerHub. If it is not go to the application folder, 
+create a jar file executing
+```sh
+./gradlew build
+```
+create a docker image executing 
+```sh
+docker build -t fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT .
+```
+and push the image to remote private docker registry executing
+```sh
+docker login
+docker push fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT
+```
+
+**Step 2:** Create a 'my-registry-key' Secret to pull the image from the private repository on  DockerHub
+```sh
+kubectl create secret docker-registry my-registry-key \
+  --docker-server=docker.io \
+  --docker-username=fsiegrist \
+  --docker-password=<my-docker-hub-pwd>
+```
+
+**Step 3:** Create the required K8s component configuration files
+
+Create a ConfigMap configuration file with the folowing content:
+
+_db-config.yaml_
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+data:
+  db_server: my-release-mysql-primary # kubectl get services
+```
+
+Create a Secret configuration file with the folowing content:
+
+_db-secret.yaml_
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+type: Opaque
+data:
+  # echo -n 'my-user' | base64 (see mysql-chart-values-minikube.yaml)
+  db_user: bXktdXNlcg== 
+  # echo -n 'my-pass' | base64 (see mysql-chart-values-minikube.yaml)
+  db_pwd: bXktcGFzcw==
+  # echo -n 'my-app-db' | base64 (see mysql-chart-values-minikube.yaml)
+  db_name: bXktYXBwLWRi
+  # echo -n 'secret-root-pass' | base64 (see mysql-chart-values-minikube.yaml)
+  db_root_pwd: c2VjcmV0LXJvb3QtcGFzcw==
+```
+
+Create a Deployment and Service configuration file with the folowing content:
+
+_java-mysql-app.yaml_
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-mysql-app-deployment
+  labels:
+    app: java-mysql-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: java-mysql-app
+  template:
+    metadata:
+      labels:
+        app: java-mysql-app
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+      containers:
+      - name: javamysqlapp
+        image: fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT
+        ports:
+        - containerPort: 8080
+        env:
+         - name: DB_USER
+           valueFrom:
+             secretKeyRef:
+               name: db-secret
+               key: db_user
+         - name: DB_PWD
+           valueFrom:
+             secretKeyRef:
+               name: db-secret
+               key: db_pwd
+         - name: DB_NAME
+           valueFrom:
+             secretKeyRef:
+               name: db-secret
+               key: db_name
+         - name: DB_SERVER
+           valueFrom:
+             configMapKeyRef:
+              name: db-config
+              key: db_server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-mysql-app-service
+spec:
+  selector:
+    app: java-mysql-app
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+```
+
+**Step 4:** Apply the configurations to the K8s cluster\
+```sh
+kubectl apply -f db-config.yaml
+kubectl apply -f db-secret.yaml
+kubectl apply -f java-mysql-app.yaml
+
+kubectl get pods -l app=java-mysql-app
+# NAME                                         READY   STATUS    RESTARTS   AGE
+# java-mysql-app-deployment-574674d7d9-86wbs   1/1     Running   0          8m16s
+# java-mysql-app-deployment-574674d7d9-vr2l8   1/1     Running   0          8m16s
+# java-mysql-app-deployment-574674d7d9-x4qgc   1/1     Running   0          8m16s
+```
+
+**Step 5 (optional):** Create a port-forwarding to access the application
+```sh
+kubectl port-forward svc/java-mysql-app-service 8080:8080
+```
+
+Open the browser and navigate to [localhost:8080](http://localhost:8080) to access the running application.
+
+Note: Because of CORS restrictions API calls triggered by the application are blocked. To avoid this, we have to setup ingress (see exercises 5 and 6).
+
 </details>
 
 ******
@@ -181,6 +323,67 @@ As a next step you
 For this deployment you just need 1 replica, since this is only for your own use, so it doesn't have to be High Availability. A simple deployment.yaml file and internal service will be enough.
 
 **Steps to solve the tasks:**
+
+**Step 1:** Create a Deployment and Service configuration file for phpmyadmin
+
+_phpmyadmin.yaml_
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin
+  labels:
+    app: phpmyadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phpmyadmin
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+    spec:
+      containers:
+        - name: phpmyadmin
+          image: phpmyadmin/phpmyadmin:5
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          env:
+            - name: PMA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: db_server
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: db_root_pwd
+  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpmyadmin-service
+spec:
+  selector:
+    app: phpmyadmin
+  ports:
+  - protocol: TCP
+    port: 8081
+    targetPort: 80
+```
+
+**Step 2:** Apply it to the cluster
+```sh
+kubectl apply -f phpmyadmin.yaml
+
+kubectl get pods -l app=phpmyadmin
+# NAME                          READY   STATUS    RESTARTS   AGE
+# phpmyadmin-794dd6c7fb-xxlrw   1/1     Running   0          3m40s
+```
 
 </details>
 
