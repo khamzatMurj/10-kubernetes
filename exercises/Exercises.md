@@ -166,19 +166,22 @@ With docker-compose, you were setting env_vars on server. In K8s there are own c
 **Steps to solve the tasks:**
 
 **Step 1:** Push docker image of java mysql app to private registry if necessary\
-Make sure the image of the [bootcamp-java-mysql](https://github.com/fsiegrist/devops-bootcamp-07-docker/tree/main/bootcamp-java-mysql) app from the exercises of module 7 is available in the private repository on DockerHub. If it is not go to the application folder, 
-create a jar file executing
+Go to the [bootcamp-java-mysql](https://github.com/fsiegrist/devops-bootcamp-07-docker/tree/main/bootcamp-java-mysql) app from the exercises of module 7. Set the version in `build.gradle` to '1.2-SNAPSHOT', adjust the versions in the `Dockerfile` accordingly and make sure, host and port in `src/main/resources/static/index.html` is set to 'localhost:8080'.
+
+Build the jar file executing
 ```sh
 ./gradlew build
 ```
-create a docker image executing 
+
+Create a docker image executing 
 ```sh
-docker build -t fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT .
+docker build -t fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.2-SNAPSHOT .
 ```
-and push the image to remote private docker registry executing
+
+Push the image to remote private registry on DockerHub executing
 ```sh
 docker login
-docker push fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT
+docker push fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.2-SNAPSHOT
 ```
 
 **Step 2:** Create a 'my-registry-key' Secret to pull the image from the private repository on  DockerHub
@@ -247,7 +250,7 @@ spec:
       - name: my-registry-key
       containers:
       - name: javamysqlapp
-        image: fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.1-SNAPSHOT
+        image: fsiegrist/fesi-repo:bootcamp-java-mysql-project-1.2-SNAPSHOT
         ports:
         - containerPort: 8080
         env:
@@ -304,8 +307,6 @@ kubectl port-forward svc/java-mysql-app-service 8080:8080
 ```
 
 Open the browser and navigate to [localhost:8080](http://localhost:8080) to access the running application.
-
-Note: Because of CORS restrictions API calls triggered by the application are blocked. To avoid this, we have to setup ingress (see exercises 5 and 6).
 
 </details>
 
@@ -401,6 +402,26 @@ Now your application setup is running in the cluster, but you still need a prope
 
 **Steps to solve the tasks:**
 
+**Minikube**
+```sh
+# minikube comes with ingress addon, so we just need to activate it
+minikube addons enable ingress 
+```
+
+**LKE**
+```sh
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx
+```
+
+**Notes on installing Ingress-controller on LKE**
+- Chart link: https://github.com/kubernetes/ingress-nginx/tree/main/charts/ingress-nginx
+- Known issue when pulling ingress-nginx images from k8s repository:
+https://www.reddit.com/r/kubernetes/comments/rorzhd/nginx_ingress_unable_to_pull_official_images/
+
+As a workaround, try a different region.
+
 </details>
 
 ******
@@ -413,6 +434,57 @@ Now your application setup is running in the cluster, but you still need a prope
 - Create Ingress rule for your application access
 
 **Steps to solve the tasks:**
+
+**Minikube**
+
+**Step 1:** Create an Ingress configuration file\
+Create an Ingress configuration file called `java-app-ingress.yaml` with the following content:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: java-mysql-app-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: java-mysql-app.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: java-mysql-app-service
+            port: 
+              number: 8080
+        pathType: Prefix
+        path: /
+```
+
+**Step 2:** Adjust host and port in index.htmland rebuild the image\
+Repeat step 1 of exercise 3 but set the host and port in `src/main/resources/static/index.html` to 'java-mysql-app.com:80'.
+
+**Step 3:** Re-deploy the application
+```sh
+kubectl delete -f java-mysql-app.yaml
+kubectl apply -f java-mysql-app.yaml
+```
+
+**Step 4:** Create ingress component
+```sh
+kubectl apply -f java-mysql-app-ingress.yaml
+```
+
+**Step 5:** Configure /etc/hosts\
+Add `127.0.0.1 java-mysql-app.com` to `/etc/hosts` file
+
+**Step 6:** Browse application\
+Open your browser and navigate to [http://java-mysql-app.com](http://java-mysql-app.com) to see the application in action.
+
+**LKE**
+- set the host name in java-mysql-app-ingress.yaml line 9 to Linode node-balancer address
+- create ingress component: `kubectl apply -f java-mysql-app-ingress.yaml`
+- access application from browser on Linode node-balancer address
 
 </details>
 
@@ -428,6 +500,11 @@ However, you don't want to expose the phpmyadmin for security reasons. So you co
 - Configure port-forwarding for phpmyadmin
 
 **Steps to solve the tasks:**
+
+**Minikube & LKE**
+```sh
+kubectl port-forward svc/phpmyadmin-service 8081:8081
+```
 
 </details>
 
