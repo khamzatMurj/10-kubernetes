@@ -819,10 +819,12 @@ kubectl get ingress -n kubernetes-dashboard --watch
 # dashboard-ingress   nginx   dashboard.com   192.168.49.2   80      32s
 ```
 
-In order to map the defined host `dashboard.com` to the IP address assigned to ingress, we add an entry `192.168.49.2    dashboard.com` to the hosts file `/etc/hosts`. Now we can access the dashboard using `http://dashboard.com`.
+In order to map the defined host `dashboard.com` to the IP address assigned to ingress, we add an entry `192.168.49.2 dashboard.com` to the hosts file `/etc/hosts`. Now we can access the dashboard using `http://dashboard.com`.
 
 ****
-Note: This seems not to work when using minikube with Docker driver.
+**Note:**
+
+This seems not to work when using minikube with Docker driver. With the Docker driver you have to call `minikube tunnel` to establish a tunnel into minikube to the service 'kubernetes-dashboard'. Then add an entry `127.0.0.1 dashboard.com` to the hosts file `/etc/hosts`. Now you can access the dashboard using `http://dashboard.com`.
 ****
 
 ### Define Multiple Paths for the Same Host
