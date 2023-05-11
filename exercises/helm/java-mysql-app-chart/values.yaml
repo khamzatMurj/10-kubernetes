@@ -1,0 +1,21 @@
+replicaCount: 1
+registrySecret: my-registry-key
+appContainerName: myapp
+appImage: myimage
+imageVersion: versiontag
+containerPort: 80
+
+servicePort: 80
+
+configName: my-config
+configData: {}
+
+secretName: my-secret
+secretData: {}
+  
+regularData: {}
+
+ingress:
+  hostName: myapp.com
+  pathType: Exact
+  path: /

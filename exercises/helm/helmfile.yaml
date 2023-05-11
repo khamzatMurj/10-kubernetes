@@ -1,0 +1,5 @@
+releases:
+  - name: java-mysql-app
+    chart: java-mysql-app-chart
+    values: 
+      - values-override.yaml

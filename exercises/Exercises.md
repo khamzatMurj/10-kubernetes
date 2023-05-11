@@ -81,7 +81,7 @@ helm search repo bitnami/mysql
 # bitnami/mysql   9.8.2           8.0.33     	MySQL is a fast, reliable, scalable, and easy t...
 ```
 
-To see the parameters of the chart, open the browser and navigate to `https://github.com/bitnami/charts/tree/main/bitnami/mysql`. You'll find that there are parameters `architecture`, `auth.rootPassword`, `secondary.replicaCount`, `secondary.persistence.storageClass` (among many others). To override these parameters for deployment on a **Minikube** cluster create a file called `mysql-chart-values-minikube.yaml` with the following content:
+To see the parameters of the chart, open the browser and navigate to `https://github.com/bitnami/charts/tree/main/bitnami/mysql`. You'll find that there are parameters `architecture`, `auth.rootPassword`, `secondary.replicaCount`, `secondary.persistence.storageClass` (among many others). To override these parameters for deployment on a **Minikube** cluster create a file called `mysql-chart-values-minikube.yaml` in the `k8s` folder with the following content:
 ```yaml
 architecture: replication
 auth:
@@ -97,7 +97,7 @@ secondary:
     storageClass: standard
 ```
 
-For deployment on **Linode LKE** create a file called `mysql-chart-values-lke.yaml` with the following content:
+For deployment on **Linode LKE** create a file called `mysql-chart-values-lke.yaml` in the `k8s` folder with the following content:
 ```yaml
 architecture: replication
 auth:
@@ -194,9 +194,9 @@ kubectl create secret docker-registry my-registry-key \
 
 **Step 3:** Create the required K8s component configuration files
 
-Create a ConfigMap configuration file with the folowing content:
+Create a ConfigMap configuration file in the `k8s` folder with the folowing content:
 
-_db-config.yaml_
+_k8s/db-config.yaml_
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -206,9 +206,9 @@ data:
   db_server: my-release-mysql-primary # kubectl get services
 ```
 
-Create a Secret configuration file with the folowing content:
+Create a Secret configuration file in the `k8s` folder with the folowing content:
 
-_db-secret.yaml_
+_k8s/db-secret.yaml_
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -226,9 +226,9 @@ data:
   db_root_pwd: c2VjcmV0LXJvb3QtcGFzcw==
 ```
 
-Create a Deployment and Service configuration file with the folowing content:
+Create a Deployment and Service configuration file in the `k8s` folder with the folowing content:
 
-_java-mysql-app.yaml_
+_k8s/java-mysql-app.yaml_
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -290,6 +290,7 @@ spec:
 
 **Step 4:** Apply the configurations to the K8s cluster\
 ```sh
+cd k8s
 kubectl apply -f db-config.yaml
 kubectl apply -f db-secret.yaml
 kubectl apply -f java-mysql-app.yaml
@@ -325,9 +326,9 @@ For this deployment you just need 1 replica, since this is only for your own use
 
 **Steps to solve the tasks:**
 
-**Step 1:** Create a Deployment and Service configuration file for phpmyadmin
+**Step 1:** Create a Deployment and Service configuration file in the `k8s` folder for phpmyadmin
 
-_phpmyadmin.yaml_
+_k8s/phpmyadmin.yaml_
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -379,6 +380,7 @@ spec:
 
 **Step 2:** Apply it to the cluster
 ```sh
+cd k8s
 kubectl apply -f phpmyadmin.yaml
 
 kubectl get pods -l app=phpmyadmin
@@ -438,8 +440,9 @@ As a workaround, try a different region.
 **Minikube**
 
 **Step 1:** Create an Ingress configuration file\
-Create an Ingress configuration file called `java-app-ingress.yaml` with the following content:
+Create an Ingress configuration file called `java-mysql-app-ingress.yaml` in the `k8s` folder with the following content:
 
+_k8s/java-mysql-app-ingress.yaml_
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -466,12 +469,14 @@ Repeat step 1 of exercise 3 but set the host and port in `src/main/resources/sta
 
 **Step 3:** Re-deploy the application
 ```sh
+cd k8s
 kubectl delete -f java-mysql-app.yaml
 kubectl apply -f java-mysql-app.yaml
 ```
 
 **Step 4:** Create ingress component
 ```sh
+cd k8s
 kubectl apply -f java-mysql-app-ingress.yaml
 ```
 
@@ -523,6 +528,235 @@ As the final step, you decide to create a helm chart for your Java application w
 - Host the chart in its own git repository
 
 **Steps to solve the tasks:**
+
+**Step 1:** Create a Helm Chart folder structure
+```sh
+mkdir helm
+cd helm
+
+helm create java-mysql-app-chart
+
+cd java-mysql-app-chart
+rm -r templates/*.*
+rm -rf templates/tests
+echo '' > values.yaml
+```
+
+**Step 2:** Create the following template and values files:
+
+_helm/java-mysql-app-chart/templates/db-config.yaml_
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configName }}
+data:
+  {{- range $key, $value := .Values.configData }}
+  {{ $key }}: {{ $value }}
+  {{- end }}
+```
+
+_helm/java-mysql-app-chart/templates/db-secret.yaml_
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.secretName }}
+type: Opaque
+data:
+  {{- range $key, $value := .Values.secretData }}
+  {{ $key }}: {{ $value | b64enc }}
+  {{- end }}
+```
+
+_helm/java-mysql-app-chart/templates/java-mysql-app-deployment.yaml_
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-deployment
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      imagePullSecrets:
+      - name: {{ .Values.registrySecret }}
+      containers:
+      - name: {{ .Values.appContainerName }}
+        image: {{ .Values.appImage }}:{{ .Values.imageVersion }}
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        env:
+        {{- range $key, $value := .Values.regularData }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+
+        {{- range $key, $value := .Values.secretData }}
+        - name: {{ $key }}
+          valueFrom:
+            secretKeyRef:
+              {{- /*
+                in loop, we lose global context, but can access global context with $
+                $ is 1 variable that is always global and will always point to the root context
+                so $.Values instead of .Values
+              */}}
+              name: {{ $.Values.secretName }}
+              key: {{ $key }}
+        {{- end }}
+
+        {{- range $key, $value := .Values.configData }}
+        - name: {{ $key }}
+          valueFrom:
+            configMapKeyRef:
+              name: {{ $.Values.configName }}
+              key: {{ $key }}
+        {{- end }}
+```
+
+_helm/java-mysql-app-chart/templates/java-mysql-app-service.yaml_
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-service
+spec:
+  selector:
+    app: {{ .Release.Name }}
+  ports:
+  - protocol: TCP
+    port: {{ .Values.servicePort }}
+    targetPort: {{ .Values.containerPort }}
+```
+
+_helm/java-mysql-app-chart/templates/java-mysql-app-ingress.yaml_
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: {{ .Values.ingress.hostName }}
+    http:
+      paths:
+      - backend:
+          service:
+            name: {{ .Release.Name }}-service
+            port: 
+              number: {{ .Values.servicePort }}
+        pathType: {{ .Values.ingress.pathType }}
+        path: {{ .Values.ingress.path }}
+```
+
+_helm/java-mysql-app-chart/values.yaml_
+```yaml
+replicaCount: 1
+registrySecret: my-registry-key
+appContainerName: myapp
+appImage: myimage
+imageVersion: versiontag
+containerPort: 80
+
+servicePort: 80
+
+configName: my-config
+configData: {}
+
+secretName: my-secret
+secretData: {}
+  
+regularData: {}
+
+ingress:
+  hostName: myapp.com
+  pathType: Exact
+  path: /
+```
+
+_helm/values-override.yaml_
+```yaml
+replicaCount: 3
+registrySecret: my-registry-key
+appContainerName: javamysqlapp
+appImage: fsiegrist/fesi-repo
+imageVersion: bootcamp-java-mysql-project-1.2-SNAPSHOT
+containerPort: 8080
+
+servicePort: 8080
+
+configName: db-config
+configData:
+  DB_SERVER: my-release-mysql-primary
+
+secretName: db-secret
+secretData: 
+  DB_USER: my-user
+  DB_PWD: my-pass
+  DB_NAME: my-app-db
+  MYSQL_ROOT_PASSWORD: secret-root-pass
+
+regularData: {}
+ # MY_ENV: my-value
+
+ingress:
+  hostName: java-mysql-app.com # set this value to Linode nodebalancer address for LKE
+  pathType: Prefix
+  path: /
+```
+
+**Step 3:** Validate that the chart is correct
+```sh
+helm install -f helm/java-mysql-app-chart/values-override.yaml java-mysql-app helm/java-mysql-app-chart --dry-run --debug
+```
+
+**Step 4:** Create a helmfile with the following content:
+
+_helm/helmfile.yaml_
+```yaml
+releases:
+  - name: java-mysql-app
+    chart: java-mysql-app-chart
+    values: 
+      - values-override.yaml
+```
+
+**Step 5:** Create the chart release
+
+If the command in step 3 shows the k8s manifest files with correct values, everything is working, and we can create the chart release.
+
+Either with Helm:
+```sh
+helm install -f helm/values-override.yaml java-mysql-app helm/java-mysql-app-chart
+
+# uninstall with
+helm uninstall java-mysql-app
+```
+
+Or with Helmfile:
+```sh
+cd helm
+helmfile sync
+
+# uninstall with
+helmfile destroy
+```
+
+**Step 5:** Host chart in its own repository
+```sh
+helm package java-mysql-app-chart
+helm push java-mysql-app-chart-0.1.0.tgz <registry>
+```
 
 </details>
 
