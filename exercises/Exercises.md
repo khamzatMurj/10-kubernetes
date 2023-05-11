@@ -752,7 +752,7 @@ helmfile sync
 helmfile destroy
 ```
 
-**Step 5:** Host chart in its own repository
+**Step 6:** Host chart in its own repository
 ```sh
 helm package java-mysql-app-chart
 helm push java-mysql-app-chart-0.1.0.tgz <registry>
