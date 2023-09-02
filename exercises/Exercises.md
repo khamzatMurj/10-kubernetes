@@ -464,7 +464,7 @@ spec:
         path: /
 ```
 
-**Step 2:** Adjust host and port in index.htmland rebuild the image\
+**Step 2:** Adjust host and port in index.html and rebuild the image\
 Repeat step 1 of exercise 3 but set the host and port in `src/main/resources/static/index.html` to 'java-mysql-app.com:80'.
 
 **Step 3:** Re-deploy the application
