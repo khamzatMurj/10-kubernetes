@@ -2,10 +2,10 @@
 ## Module 10 "Container Orchestration with Kubernetes"
 <br />
 
-This project contains notes related to the videos and exercises in Module 10 "Container Orchestration with Kubernetes" of Nana Janashia's [DevOps Bootcamp](https://www.techworld-with-nana.com/devops-bootcamp).
+This project contains [notes](./Notes.md) related to the videos in Module 10 "Container Orchestration with Kubernetes" of Nana Janashia's [DevOps Bootcamp](https://www.techworld-with-nana.com/devops-bootcamp).
 
 ### Exercises
-The Java application the [exercises](./exercises/Exercises.md) of this module are based on is available in the GitHub repository [devops-bootcamp-java-mysql](https://github.com/fsiegrist/devops-bootcamp-java-mysql).
+It also contains the [exercises](./exercises/Exercises.md) for this module. The Java application the exercises of this module are based on is available in the GitHub repository [devops-bootcamp-java-mysql](https://github.com/fsiegrist/devops-bootcamp-java-mysql).
 
 ### Demo Projects
 And finally it contains the following demo projects:
@@ -17,3 +17,5 @@ And finally it contains the following demo projects:
 - [Deploy Microservices Application to Remote K8s Cluster](./demo-projects/6-deploy-microservices-app-to-remote-k8s-cluster/)
 - [Create Helm Chart for Microservices](./demo-projects/7-helm-chart-for-microservices/)
 - [Deploy Microservices with Helmfile](./demo-projects/8-deploy-microservices-with-helmfile/)
+
+<< Back to [DevOps Bootcamp Module Overview](https://github.com/fsiegrist/twn-devops-bootcamp)
