@@ -826,6 +826,45 @@ In order to map the defined host `dashboard.com` to the IP address assigned to i
 
 This seems not to work when using minikube with Docker driver. With the Docker driver you have to call `minikube tunnel` to establish a tunnel into minikube to the service 'kubernetes-dashboard'. Then add an entry `127.0.0.1 dashboard.com` to the hosts file `/etc/hosts`. Now you can access the dashboard using `http://dashboard.com`.
 ****
+### How to define a custom default backend
+1. Deploy a default backend (example using default-http-backend):
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: default-backend
+  namespace: ingress-nginx
+spec:
+  selector:
+    app: default-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: default-backend
+  namespace: ingress-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: default-backend
+  template:
+    metadata:
+      labels:
+        app: default-backend
+    spec:
+      containers:
+      - name: default-backend
+        image: k8s.gcr.io/defaultbackend-amd64:1.5
+        ports:
+        - containerPort: 80
+
+```
+
 
 ### Define Multiple Paths for the Same Host
 ```yaml
